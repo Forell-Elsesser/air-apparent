@@ -1,7 +1,8 @@
 # Categorization module design: rule-based grouping from story lines, grid lines and declared exterior segments
 
-Date: 2026-10-27. Status: draft for approval (revised after builder check). Supersedes the
-envelope-based rules in `src/air_apparent/categorization/rules.py`.
+Date: 2026-10-27. Status: draft for approval (revised after builder check and after a read-only
+live check against the Test Model, see section 9.1). Supersedes the envelope-based rules in
+`src/air_apparent/categorization/rules.py`.
 
 ## 1. Intent
 
@@ -20,7 +21,8 @@ The new module reproduces those sixteen groups from explicit, inspectable rules 
 - a YAML declaration of the building's exterior wall segments and penthouse footprints.
 
 The engineers' existing `W_*` groups in `examples/Test Model.EDB` are the acceptance test: the
-rules must reproduce them, with the exceptions listed in section 9.
+rules must reproduce them, with the exceptions listed in section 9. A throwaway script applying
+these rules to the live model already does (section 9.1).
 
 ## 2. Goals, non-goals, anti-goals
 
@@ -60,35 +62,40 @@ rules must reproduce them, with the exceptions listed in section 9.
 | Decision | By | Note |
 | --- | --- | --- |
 | Rules are driven by story lines and grid lines | James | grid lines are a convenience for naming and declaring, not a requirement |
-| Stories come from the Story API; grid lines from the interactive tables | James | `cGridSys.GetGridSysCartesian_1` exists in the docs but was not chosen; the reason was not stated and the builder does not revisit it |
+| Stories come from the Story API; grid lines from the interactive tables | James | both verified live (section 4) |
 | Exterior wall faces are declared in YAML as segments, not inferred | James | "declare the exterior segments path" |
 | Only `W_*` groups are read, compared and written | James | all other groups in the sample model are stale artifacts |
 | Write back exactly the sixteen per-pattern `W_*` groups | James | not the finer groups |
 | Group write-back follows the `objects_group` sequence in CSI Model Assistant | James (pointed to it) | section 8.1 |
-| Level = story band containing the shell's top edge | Claude, confirmed by data | ETABS's own association convention; handles parapet strips cut at non-story elevations |
-| Element type follows from level | Claude, confirmed by data | section 6 |
-| YAML stays in feet; the adapter sets present units to kip-ft before reading | Claude | consistent with the rest of the tool; the model itself is in inches |
-| Equipment gains `support_frames` for grouping; `support_joints` stays optional so Patterns keeps working | Claude | the sample model applies equipment loads as frame point loads at beam ends; `W_Mech` groups contain beams only; load application moves to the Patterns follow-up |
+| Level = story band containing the shell's top edge | Claude, confirmed live | ETABS's own association convention; handles parapet strips cut at non-story elevations |
+| Element type follows from level | Claude, confirmed live | section 6 |
+| A segment may carry a height range (`z_from`/`z_to`) | Claude, forced by the data | the Test Model's four bump-outs stop at 47.75 ft; the main J and E walls behind them are exposed from 46 ft up |
+| Placement = the segment overlapping the majority of the shell's plan extent, against the declared range with no widening | Claude, forced by the data | the earlier midpoint-with-tolerance rule misplaced 17 boundary shells and left 13 ambiguous |
+| YAML stays in feet; the adapter sets present units to kip-ft before reading | Claude | database tables follow present units too (verified) |
+| Equipment gains `support_frames` for grouping; `support_joints` stays optional so Patterns keeps working | Claude | `W_Mech` groups contain beams only; load application moves to the Patterns follow-up |
 | Offline fixture = JSON snapshot captured once from the live Test Model | Claude | avoids a second parser of ETABS data |
-| The three 6-in slivers at the west end of grid J are declared as a segment | Claude | they are exterior in the full building; the model loads them in three of four directions, which is the model's inconsistency, not the rule's |
+| The 6 in sliver column at the west end of grid J is declared as a segment | Claude | it is exterior; the model loads its five pieces inconsistently (section 9) |
 | A segment may be declared `outside: none` to mark a face as deliberately unexposed | Claude | the grid 28.5 cut line; keeps the diagnostics clean |
 
 ## 4. Reading the connected model (phase 1)
 
-This is the first deliverable and is independently testable: connect to the Test Model and dump
-stories and grid lines that match the `$et` export.
+Everything in this section was exercised on 2026-10-27 against the live seven-story Test Model
+(ETABS 23.4.0 beta, pid 62104) with a read-only script; the facts below are observed, not assumed.
 
 ### 4.1 Connection and units
 
 Unchanged: `connect_live(pid)` attaches via `ETABSv1.Helper.GetObjectProcess`. On connect the
 adapter records the present units, sets `kip_ft_F` (value 4), and restores them on `close()`. All
 API lengths are therefore feet. The GUI must call `close()` on disconnect/exit (today it does not).
+The Test Model's database units are kip-in (enum 3).
 
 ### 4.2 Stories
 
 `SapModel.Story.GetStories_2()` returns, in comtypes order:
 `(BaseElevation, NumberStories, StoryNames, StoryElevations, StoryHeights, IsMasterStory,
-SimilarToStory, SpliceAbove, SpliceHeight, Color, ret)`. Names are top-down.
+SimilarToStory, SpliceAbove, SpliceHeight, Color, ret)`. **On ETABS 23.4 the arrays come back
+bottom-up** (L2 first), the opposite of the E2K file. The reader sorts by elevation and never
+assumes an order.
 
 Snapshot representation:
 
@@ -104,34 +111,34 @@ class Story:
     reference_joint: str | None = None  # unchanged
 
 ModelSnapshot.base_elevation_ft: float
-ModelSnapshot.stories: list[Story]     # bottom-up order after reading
+ModelSnapshot.stories: list[Story]     # bottom-up after reading
 ```
 
 Derived, not stored: the **story bands**, one per story, `(bottom, top] = (elevation of the story
 below or base, elevation of this story]`, named after the story.
 
-Test Model expectation (from the `$et`): base -0.833 ft; L2 31.5; R 60.083; Parapet_1 65.083;
-Mech 70.708; Penthouse 75.167; Parapet_2 76.917.
+Observed: base -0.833 ft; L2 31.5; R 60.083; Parapet_1 65.083; Mech 70.708; Penthouse 75.167;
+Parapet_2 76.917.
 
 ### 4.3 Grid lines
 
-Through `SapModel.DatabaseTables`:
+Through `SapModel.DatabaseTables`. Observed on ETABS 23.4:
 
-1. `GetAvailableTables()` -> `(NumberTables, TableKey[], TableName[], ImportType[], ret)`.
-   Choose the table whose name contains both "Grid" and "Line" (case-insensitive). The exact key is
-   not documented; the implementation discovers it and records it in an `info` diagnostic. If none
-   or more than one matches, raise `AdapterError` listing the candidates.
-2. `GetAllFieldsInTable(key)` -> field keys, names, descriptions, `UnitsString` per field, and
-   importability. Columns are mapped by name, not position, and the ordinate column's
-   `UnitsString` decides the unit conversion (section 4.3.1).
-3. `GetTableForDisplayArray(key, [""], "", ...)` -> `(FieldKeyList, TableVersion,
-   FieldsKeysIncluded, NumberRecords, TableData, ret)`. `TableData` is a flat string array, row by
-   row, `len(FieldsKeysIncluded)` cells per row.
-
-Columns to extract (the builder confirms the exact names against the live table): grid system
-name, grid system type, line direction (X or Y for Cartesian), line ID, ordinate, visibility, and
-origin X/Y plus rotation of the system if present in this table or in a sibling "Grid Systems"
-table.
+- `GetAvailableTables()` lists 125 tables. Two are grid-related, and the key equals the name:
+  `Grid Definitions - Grid Lines` and `Grid Definitions - General`. The reader selects the key
+  containing "Grid" and "Line" and not "General"; anything other than exactly one match raises
+  `AdapterError` listing the candidates.
+- `GetAllFieldsInTable("Grid Definitions - Grid Lines")` fields: `Name`, `LineType`, `ID`,
+  `Ordinate` (units), `Angle` (deg), `X1`, `Y1`, `X2`, `Y2` (units), `BubbleLoc`, `Visible`.
+- `GetTableForDisplayArray(key, [""], "", 0, [], 0, [])` returns columns `Name, LineType, ID,
+  Ordinate, BubbleLoc, Visible` for Cartesian lines; `LineType` is `X (Cartesian)` or
+  `Y (Cartesian)`; 18 rows for the Test Model. Columns are mapped by key, never by position.
+- `Grid Definitions - General` holds the systems: `Tower, Name, Type, Ux, Uy, Rz, StoryRange,
+  BubbleSize, Color, GUID`, one row (`T1`, `G1`, `Cartesian`, 0, 0, 0).
+- **Table values follow the present units.** With database units kip-in the ordinate of grid 28.5
+  reads `27`; after `SetPresentUnits(kip_ft_F)` it reads `2.25`, and the field's `UnitsString`
+  changes from `in` to `ft`. The reader therefore reads tables after setting kip-ft and checks that
+  the ordinate `UnitsString` is `ft`; anything else raises `AdapterError`. No span heuristic.
 
 Snapshot representation:
 
@@ -149,47 +156,39 @@ class GridLine:
     system: str
     axis: str            # "x" for a line of constant X (labels 28..39), "y" for constant Y (J..E)
     label: str
-    ordinate_ft: float   # in global coordinates (origin and rotation applied)
+    ordinate_ft: float   # global coordinates (origin and rotation applied)
 
 ModelSnapshot.grid_systems: list[GridSystem]
 ModelSnapshot.grid_lines: list[GridLine]
 ```
 
-#### 4.3.1 Units of table values
-
-The ordinate field's `UnitsString` from `GetAllFieldsInTable` is authoritative: "in" divides by
-12, "ft" passes through, "mm"/"m" convert, anything else raises `AdapterError` naming the string.
-Only if the string is empty does the reader fall back to a plausibility check against
-`PointObj.GetAllPoints`: the X-ordinate span must lie within 0.9 to 1.1 of the point X span, or
-within 2% of 12 times it (inches), else `AdapterError`. The builder confirms the live behaviour once
-and records it in `docs/etabs_setup.md`.
-
 Only Cartesian systems with zero rotation are used by the rules. Others are kept in the snapshot
 and reported as `warning: grid_system_unsupported`.
 
-Test Model expectation: one system `G1`; X lines 28, 28.5, 29, 30 ... 39 at 0, 2.25, 3.0, 43.75,
-85.75, ... 421.75 ft; Y lines J, H, G, F, E at 0, 59, 119, 179, 238 ft.
+Observed: X lines 28, 28.5, 29, 30 ... 39 at 0, 2.25, 3.0, 43.75, 85.75, ... 421.75 ft; Y lines J,
+H, G, F, E at 0, 59, 119, 179, 238 ft.
 
 ### 4.4 Shells, frames, points, labels
 
-Replace the per-object loops with bulk calls:
+Bulk calls replace the per-object loops:
 
-- `AreaObj.GetAllAreas()` -> names, design orientation, and for each area its boundary point names
-  and X/Y/Z coordinates (`PointDelimiter` marks the last point index of each area). This gives
-  `Shell.corners` directly. `GetTransformationMatrix` is no longer needed for categorization; keep
-  `local3` populated (one call per shell, or lazily) only because the Patterns sign conversion
-  still reads it.
-- `FrameObj.GetAllFrames()` -> names, section, story, end point names and coordinates.
+- `AreaObj.GetAllAreas()` -> `(NumberNames, MyName, DesignOrientation, NumberBoundaryPts,
+  PointDelimiter, PointNames, PointX, PointY, PointZ, ret)`. `PointDelimiter[i]` is the **0-based
+  index of the last boundary point of area i** (observed: values 3, 7, 11, ... and the last equals
+  `NumberBoundaryPts - 1`). The Test Model has 1425 areas and 5722 boundary points. The API's
+  unique names are integers (e.g. `1426`); labels come separately.
+- `FrameObj.GetAllFrames()` -> names, section, story, end point names and coordinates. 222 frames.
 - `PointObj.GetAllPoints()` -> names and coordinates.
-- `AreaObj.GetLabelNameList()`, `FrameObj.GetLabelNameList()`, `PointObj.GetLabelNameList()` ->
-  unique name to `(label, story)`. Stored as `ModelSnapshot.labels: dict[str, tuple[str, str]]`
-  keyed by object ref (`A:<name>`, `F:<name>`, `P:<name>`). Used only for reporting and for matching
-  the `$et` when debugging; never for rules.
+- `AreaObj.GetLabelNameList()` etc. -> unique name to `(label, story)`; e.g. `1426 -> (W1, L2)`.
+  Stored as `ModelSnapshot.labels: dict[str, tuple[str, str]]` keyed by object ref. Used only for
+  reporting and for matching the `$et` when debugging; never for rules.
+- `GetTransformationMatrix` is no longer needed for categorization; `local3` stays populated (per
+  shell, or lazily) only because the Patterns sign conversion still reads it.
 
 ### 4.5 Groups
 
-`GroupDef.GetNameList()`, then `GetAssignments(name)` only for names starting with `W_`.
-`ObjectType` codes: 1 point, 2 frame, 5 area (others ignored). Stored in
+`GroupDef.GetNameList()` (44 groups in the Test Model), then `GetAssignments(name)` only for the
+16 names starting with `W_`. `ObjectType` codes: 1 point, 2 frame, 5 area. Stored in
 `ModelSnapshot.groups: dict[str, list[str]]` as today, restricted to `W_*`.
 
 ### 4.6 Read-back fixes in the same adapter
@@ -212,10 +211,8 @@ live.
 
 ### 4.8 Phase 1 acceptance
 
-Connect to the Test Model (new seven-story version), read, and print stories and grid lines. They
-must match section 4.2 and 4.3 expectations to 0.01 ft. The shell count is checked against
-`AreaObj.Count()` (the API reports unique objects; the `$et`'s 1425 assignment lines include
-label-per-story duplicates).
+Connect to the Test Model, read, and print stories and grid lines. They must match sections 4.2
+and 4.3 to 0.01 ft. The shell count must equal `AreaObj.Count()` (1425).
 
 ## 5. YAML schema additions (schema_version 2)
 
@@ -230,12 +227,15 @@ exterior_segments:
   # in feet; a grid label resolves against the connected model's grid lines and an unknown label is
   # a config error at read time. axis is required only when along is a number.
   - {id: J_W, along: J, from: 25.5, to: 218.417, outside: "-Y"}
+  # Optional height range in model elevation (ft) for faces that are exterior only above or below
+  # something, such as the main wall above a low bump-out. A shell matches on its z-midpoint.
+  - {id: J_SM_top, along: J, from: 218.417, to: 241.667, outside: "-Y", z_from: 46.0}
   # outside: none declares a face that is deliberately not exposed (a cut line, an expansion joint).
   - {id: W_cut, along: "28.5", from: J, to: E, outside: none}
 
 categorization:
   plane_tolerance_ft: 0.1      # shell plane vs segment ordinate; must separate grids 28.5 and 29
-  range_tolerance_ft: 0.5      # shell midpoint vs segment range
+  extent_tolerance_ft: 0.5     # a shell poking further than this beyond its segment gets a warning
   level_tolerance_ft: 0.05     # shell top vs story elevation
 
 levels:
@@ -250,7 +250,7 @@ Rules for the declaration:
 
 - `from`/`to` are along the perpendicular axis. `outside` must be perpendicular to the line, or
   `none`. Segment ids are unique; they are the "side relative to centre" names in group specs.
-- Two segments on the same line may not have overlapping ranges (config error).
+- Two segments on the same line may not overlap in both range and height (config error).
 - `plan_dimensions_source: etabs` derives L and B from the declared segments' overall extent
   (max minus min ordinate per axis, `outside: none` segments included), not from a shell envelope.
 - `story_bands` (pressure evaluation heights) stay as engineering input. Categorization validates
@@ -288,23 +288,31 @@ assignments, and the `force_conservation` check runs only over equipment that ha
 equipment loads as frame point loads is the section 10 follow-up. Existing configs (`support_joints`
 only) keep working; `schema_version: 1` files are rejected with a message naming the new fields.
 
-### 5.4 Test Model declaration (complete)
+### 5.4 Test Model declaration (complete, verified live)
 
 Feet, three decimals. Grid labels in quotes where numeric-looking. This is the file
 `examples/test_model.yaml` uses; every non-categorization value in that file (wind inputs,
 pressure bands, equipment and platform dimensions, story shears) is copied from
 `examples/reference_sample.yaml` because the file is a test fixture, not the project's configuration.
 
+The four bump-outs are 11 ft deep and run from grade to 47.75 ft. Their own faces need no height
+range (each is the only segment on its plane). The main J and E walls behind them are exposed from
+46 ft up, which is where the engineers split the shells; those four stretches carry `z_from: 46`.
+
 ```yaml
 exterior_segments:
-  - {id: J_W,     along: J,       from: 25.5,    to: 218.417, outside: "-Y"}
-  - {id: J_E,     along: J,       from: 241.667, to: "39",    outside: "-Y"}
-  - {id: J_sliver, along: J,      from: 1.75,    to: 2.25,    outside: "-Y"}   # 6 in west of SW bump-out
-  - {id: E_W,     along: E,       from: 25.5,    to: 218.417, outside: "+Y"}
-  - {id: E_E,     along: E,       from: 241.667, to: "39",    outside: "+Y"}
-  - {id: G39,     along: "39",    from: J,       to: E,       outside: "+X"}
-  - {id: W_cut,   along: "28.5",  from: J,       to: E,       outside: none}   # building continues west
-  # four 11 ft bump-outs; x 2.25-25.5 and 218.417-241.667; beyond J (y -11) and beyond E (y 249)
+  - {id: J_W,      along: J,     from: 25.5,    to: 218.417, outside: "-Y"}
+  - {id: J_E,      along: J,     from: 241.667, to: "39",    outside: "-Y"}
+  - {id: J_sliver, along: J,     from: 1.75,    to: 2.25,    outside: "-Y"}   # 6 in west of grid 28.5
+  - {id: J_SW_top, along: J,     from: 2.25,    to: 25.5,    outside: "-Y", z_from: 46.0}
+  - {id: J_SM_top, along: J,     from: 218.417, to: 241.667, outside: "-Y", z_from: 46.0}
+  - {id: E_W,      along: E,     from: 25.5,    to: 218.417, outside: "+Y"}
+  - {id: E_E,      along: E,     from: 241.667, to: "39",    outside: "+Y"}
+  - {id: E_NW_top, along: E,     from: 2.25,    to: 25.5,    outside: "+Y", z_from: 46.0}
+  - {id: E_NM_top, along: E,     from: 218.417, to: 241.667, outside: "+Y", z_from: 46.0}
+  - {id: G39,      along: "39",  from: J,       to: E,       outside: "+X"}
+  - {id: W_cut,    along: "28.5", from: J,      to: E,       outside: none}   # building continues west
+  # bump-outs beyond J (y -11) and beyond E (y 249), x 2.25-25.5 and 218.417-241.667
   - {id: SW_s, axis: y, along: -11.0,   from: "28.5",  to: 25.5,    outside: "-Y"}
   - {id: SW_w,         along: "28.5",   from: -11.0,   to: J,       outside: "-X"}
   - {id: SW_e, axis: x, along: 25.5,    from: -11.0,   to: J,       outside: "+X"}
@@ -356,23 +364,24 @@ penthouse parapets. A band not listed is `unresolved: level_unmapped`.
 
 **R3 Placement.**
 
-- Wall and parapet shells are matched against `exterior_segments`: same axis, plane ordinate within
-  `plane_tolerance_ft` of the segment's `along`, and plan midpoint within `[from, to]` widened by
-  `range_tolerance_ft`. Exactly one match places the shell and gives it `segment_id` and
-  `outside`. A segment with `outside: none` places the shell as `excluded: declared_unexposed`.
-  No match: `unresolved: no_exterior_segment` with the ordinate and extent in the message (an
-  undeclared face, an interior wall on a grid line). More than one match: `error:
-  ambiguous_segment`.
-- Penthouse body and penthouse parapet shells are matched against each penthouse's four footprint
-  edges with the same tolerances; `outside` is the edge's outward normal; `component` is the
-  penthouse id. No match: `unresolved: no_penthouse_edge`.
+- Candidate segments for a wall or parapet shell: same axis, plane ordinate within
+  `plane_tolerance_ft` of the segment's `along`, the shell's z-midpoint inside the segment's
+  `[z_from, z_to]` when given, and the shell's plan extent overlapping the segment's declared
+  `[from, to]` (no widening) by at least half the shell's width. The shell is placed on the
+  candidate with the **largest overlap**; it gets that segment's `segment_id` and `outside`. Two
+  candidates with equal overlap are `error: ambiguous_segment`. No candidate: `unresolved:
+  no_exterior_segment` with the ordinate, extent and z-range in the message. A segment with
+  `outside: none` places the shell as `excluded: declared_unexposed`.
+- Penthouse body and penthouse parapet shells are matched the same way against each penthouse's
+  four footprint edges; `outside` is the edge's outward normal; `component` is the penthouse id.
+  No match: `unresolved: no_penthouse_edge`.
 - **Shared lines.** Where a penthouse edge coincides with an exterior segment (PH2 shares J, E and
   grid 39; PH1 shares E), a parapet-band shell is a penthouse body, not a main parapet, when its
   stack (R5) tops out at or above the lowest `levels.penthouse_body` band bottom; otherwise it is
   a main parapet. A parapet-band shell on a penthouse edge that matches no exterior segment is a
-  penthouse body with `warning: body_below_penthouse_level`.
+  penthouse body with `warning: body_below_penthouse_level`. (The Test Model has no such shell.)
 - An `overrides` entry wins over R2/R3 and must supply whatever the rules could not.
-- A shell whose plan extent exceeds its segment range by more than `range_tolerance_ft` is placed
+- A shell whose plan extent exceeds its segment range by more than `extent_tolerance_ft` is placed
   but gets `warning: extent_exceeds_segment`.
 
 **R4 Role per direction.** For each wind direction d: `outside` opposite d -> WINDWARD; same as d
@@ -456,7 +465,8 @@ sixteen names, in the adapter's `set_group(name, members)`:
 Roughly seven thousand `SetGroupAssign` calls for the Test Model; no bulk route exists for named
 members. Groups starting with `W_` are tool-managed by convention; the ownership manifest records
 them. No other group is created, modified or deleted. CSI Model Assistant's tools reference notes
-that area objects may not be groupable on some ETABS builds; phase 1 confirms it on 23.
+that area objects may not be groupable on some ETABS builds; the Test Model's `W_*` groups contain
+areas, so ETABS 23 supports it.
 
 ### 8.2 Workflow and GUI
 
@@ -470,29 +480,43 @@ that area objects may not be groupable on some ETABS builds; phase 1 confirms it
 
 ## 9. Testing
 
+### 9.1 Live check already performed (2026-10-27)
+
+A throwaway script (not kept in the repo) connected read-only to the Test Model, read everything in
+section 4, applied rules R0-R6 with the section 5.4 declaration, and compared with the model's
+groups. Present units were switched to kip-ft for the read and restored afterwards; nothing was
+written. Result:
+
+| Group | Model | Rules | Difference |
+| --- | --- | --- | --- |
+| `W_PH_+X / -X / +Y / -Y` | 18 / 22 / 22 / 22 | same | none |
+| `W_Parapet_±X/±Y` | 695 each | 695 | none |
+| `W_Wall_+X / -X / -Y` | 568 | 569 | rules add API object `2850` (label W2048 at L2), the lowest 7.2 ft piece of the 6 in sliver column at the west end of J, x 1.75-2.25 ft, which the model loads in no direction |
+| `W_Wall_+Y` | 565 | 569 | rules add `2850`, `2848`, `2846`, `2844` (W2048, W2046, W2032, W2029), the sliver column below 46 ft; the top piece `2842` (W2027) is in all four model groups |
+| `W_Mech_±X / ±Y` | 135 / 93 | configured lists | every member is a beam whose top is in the Mech band |
+
+Nothing in any model group is missing from the rules. Of the vertical shells the rules do not place
+(108 `no_exterior_segment` and 16 `declared_unexposed`), none is in any model group. No shell was
+ambiguous. The only disagreement is the sliver column, which the model itself loads inconsistently.
+
+### 9.2 Fixture and acceptance assertions
+
 **Fixture.** `tests/fixtures/test_model_snapshot.json` captured from the live seven-story Test
 Model (section 4.7), and `examples/test_model.yaml` as in section 5.4.
 
-**Acceptance assertions.** The model's own `W_*` groups are the expected answer, with one
-documented exception. On any other mismatch the builder stops and reports it; whether it is a
-YAML error, a rule error or a model inconsistency is James's call, and the exception list below is
-only extended with his agreement.
-
-| Group | Expected |
-| --- | --- |
-| `W_Parapet_±X/±Y` | rule membership == model membership, 695 each |
-| `W_PH_+X/-X/+Y/-Y` | == model, 18 / 22 / 22 / 22 |
-| `W_Wall_+X/-X/-Y` | == model, 568 each |
-| `W_Wall_+Y` | rule gives 568; model has 565; the three extra are exactly the 6 in slivers on `J_sliver` (shells W2029, W2032 at R and W2046 at L2 in the `$et`), which the model loads in the other three directions. Documented model inconsistency. |
-| `W_Mech_±X` / `±Y` | == model, 135 / 93 |
+**Acceptance assertions** encode the 9.1 table exactly. The model's own `W_*` groups are the expected
+answer, with the sliver column as the one documented exception. On any other mismatch the builder
+stops and reports it; whether it is a YAML error, a rule error or a model inconsistency is James's
+call, and the exception list is only extended with his agreement.
 
 **Rule unit tests** with hand-built snapshots: each R-rule, each diagnostic code, tolerance edges
 (grid 28.5 vs 29), the collinear-kink shell, a body split at Mech on a shared line, an undeclared
-face, an `outside: none` segment, an ambiguous segment, unit-string handling and the span fallback,
-grid-label resolution and unknown labels, overlapping segment ranges, schema v1 rejection.
+face, an `outside: none` segment, a tied overlap (ambiguous), a shell straddling two segments
+(largest overlap wins), a `z_from` segment, unit-string check, grid-label resolution and unknown
+labels, overlapping segment ranges, schema v1 rejection.
 
 **Phase 1 live check** is manual and recorded in `docs/etabs_setup.md`: stories and grids dumped
-from the Test Model match the `$et`; area objects can be grouped through the API on ETABS 23.
+from the Test Model match section 4.
 
 Existing tests that encode envelope behaviour (`unsupported_layout`, edge coverage,
 `AA_PREVIEW_*` names, `reconcile_membership`) are rewritten or removed with the code they test.
@@ -514,9 +538,10 @@ Existing tests that encode envelope behaviour (`unsupported_layout`, edge covera
 
 ## 11. Constraints
 
-- Windows, ETABS 23, Python 3.11+, `comtypes`. Core modules never import comtypes.
-- One running ETABS instance must have the new Test Model open for phase 1 acceptance and for the
-  fixture capture. Two instances are open on James's machine today; the pid is passed explicitly.
+- Windows, ETABS 23, Python 3.11+, `comtypes` (1.4.17 works on Python 3.14). Core modules never
+  import comtypes.
+- One running ETABS instance must have the Test Model open for phase 1 acceptance and for the
+  fixture capture; the pid changes with every launch and is passed explicitly.
 - Ruff and pytest stay green in CI without ETABS.
 - Yinchen is actively editing `ui.py`, `workflow.py` and `adapter.py`; the builder rebases on
   `main` before each phase and keeps changes to those files minimal and well separated.
@@ -524,8 +549,6 @@ Existing tests that encode envelope behaviour (`unsupported_layout`, edge covera
 ## 12. Left to the builder
 
 - Internal structure of the rules module (one function per rule is suggested).
-- How table columns are matched by name, and the exact discovery heuristic, as long as failure is
-  loud and lists what was found.
 - JSON layout of the captured snapshot and the capture CLI's argument shape.
 - Whether `local3` is read eagerly or lazily.
 - How the 72 chiller beams are partitioned into equipment entries for the fixture.
