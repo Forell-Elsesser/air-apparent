@@ -259,6 +259,7 @@ class ModelSnapshot:
     grid_systems: list[GridSystem] = field(default_factory=list)
     grid_lines: list[GridLine] = field(default_factory=list)
     labels: dict[str, tuple[str, str]] = field(default_factory=dict)  # object ref -> (label, story)
+    read_diagnostics: list[Diagnostic] = field(default_factory=list)  # from the adapter read
 
 
 @dataclass(frozen=True)

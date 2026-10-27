@@ -42,7 +42,7 @@ class FakeAdapter:
 
     def read_model(self) -> ModelSnapshot:
         snap = copy.deepcopy(self.snapshot)
-        snap.groups = {k: list(v) for k, v in self.groups.items()}
+        snap.groups = self.read_groups("W_")
         member_of: dict[str, list[str]] = {}
         for g, refs in snap.groups.items():
             for r in refs:
@@ -54,8 +54,9 @@ class FakeAdapter:
         snap.existing_combos = list(self.combos)
         return snap
 
-    def read_groups(self) -> dict[str, list[str]]:
-        return {k: list(v) for k, v in self.groups.items()}
+    def read_groups(self, prefix: str = "W_") -> dict[str, list[str]]:
+        return {k: list(v) for k, v in self.groups.items()
+                if not prefix or k.lower().startswith(prefix.lower())}
 
     def set_group(self, name: str, members: list[str]) -> None:
         self._op(f"set_group:{name}")

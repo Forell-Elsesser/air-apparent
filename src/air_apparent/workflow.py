@@ -141,7 +141,7 @@ class WindSession:
         a = self.adapter
         manifest = a.read_manifest()
         owned = set(manifest.get("groups", []))
-        existing = a.read_groups()
+        existing = a.read_groups("")
         specs = self.cats.groups
         diags: list[Diagnostic] = []
         for g in specs:
@@ -171,7 +171,7 @@ class WindSession:
             diags = self.create_preview_groups()
             if diags:
                 raise AdapterError("; ".join(d.message for d in diags))
-        current = self.adapter.read_groups()
+        current = self.adapter.read_groups(PREFIX)
         diags = reconcile_membership([spec], {name: current[name]} if name in current else {})
         if any(d.level == "error" for d in diags):
             self.preview_valid = False
@@ -180,7 +180,7 @@ class WindSession:
 
     def reconcile_groups(self) -> list[Diagnostic]:
         """Read tool-owned groups back from ETABS and compare with the preview specs."""
-        current = {k: v for k, v in self.adapter.read_groups().items() if k.startswith(PREFIX)}
+        current = self.adapter.read_groups(PREFIX)
         diags = reconcile_membership(self.cats.groups, current)
         if any(d.level == "error" for d in diags):
             self.preview_valid = False

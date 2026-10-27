@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 
-from .models import Frame, GridLine, GridSystem, Joint, ModelSnapshot, Shell, Story
+from .models import Diagnostic, Frame, GridLine, GridSystem, Joint, ModelSnapshot, Shell, Story
 
 FORMAT_VERSION = 1
 
@@ -37,4 +37,5 @@ def snapshot_from_json(text: str) -> ModelSnapshot:
         grid_systems=[GridSystem(**g) for g in d.get("grid_systems", [])],
         grid_lines=[GridLine(**g) for g in d.get("grid_lines", [])],
         labels={k: (v[0], v[1]) for k, v in d.get("labels", {}).items()},
+        read_diagnostics=[Diagnostic(**x) for x in d.get("read_diagnostics", [])],
     )
