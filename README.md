@@ -20,6 +20,9 @@ pytest
 
 ## Run
 
+See the [user guide](docs/user_guide.md) for installation, the complete offline walkthrough,
+project input preparation, live ETABS steps, exports, and troubleshooting.
+
 ```bash
 air-apparent examples/reference_sample.yaml     # Tkinter GUI (needs a Python build with tkinter)
 ```
@@ -52,7 +55,8 @@ print(s.apply().message, [v.ok for v in s.verify()])
 | `workflow.py`, `reporting.py`, `ui.py` | orchestration, exports, Tkinter UI |
 | `templates/wind_inputs.yaml`, `examples/reference_sample.yaml` | starting template, workbook benchmark |
 
-Docs: [engineering basis](docs/engineering_basis.md), [module interfaces](docs/module_interfaces.md),
+Docs: [user guide](docs/user_guide.md), [engineering basis](docs/engineering_basis.md),
+[module interfaces](docs/module_interfaces.md),
 [ETABS setup](docs/etabs_setup.md), [limitations](docs/limitations.md).
 
 Examples: [sample calculation and ETABS assignment walkthrough](examples/README.md),
