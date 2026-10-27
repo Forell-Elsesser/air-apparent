@@ -175,6 +175,18 @@ class WindSession:
 
     def select_group(self, name: str) -> None:
         self._need_adapter()
+        spec = next((g for g in self.cats.groups if g.name == name), None) if self.cats else None
+        if spec is None:
+            raise ValueError("Calculate first and select a group from the current preview")
+        if not self.preview_valid:
+            diags = self.create_preview_groups()
+            if diags:
+                raise AdapterError("; ".join(d.message for d in diags))
+        current = self.adapter.read_groups()
+        diags = reconcile_membership([spec], {name: current[name]} if name in current else {})
+        if any(d.level == "error" for d in diags):
+            self.preview_valid = False
+            raise AdapterError("; ".join(d.message for d in diags))
         self.adapter.select_group(name)
 
     def reconcile_groups(self) -> list[Diagnostic]:

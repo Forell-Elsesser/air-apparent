@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-import os
 import traceback
 from dataclasses import asdict
 from pathlib import Path
@@ -12,9 +12,13 @@ from .config import ConfigError, effective_config_yaml
 from .reporting import export_all, group_table, pressure_output_results
 from .workflow import WindSession
 
+DEFAULT_YAML = Path(__file__).resolve().parents[2] / "templates" / "wind_inputs.yaml"
+GROUP_COLUMNS = ("group", "category", "band", "direction", "role", "result_id", "value", "pattern",
+                 "members", "sign")
+
 
 class App:
-    def __init__(self, root, default_yaml: str = "") -> None:
+    def __init__(self, root, default_yaml: str = str(DEFAULT_YAML)) -> None:
         import tkinter as tk
         from tkinter import ttk
 
@@ -23,7 +27,7 @@ class App:
         root.title("air-apparent - ASCE 7-10 horizontal MWFRS wind loads for ETABS")
         self.s = WindSession()
         self.yaml_path = default_yaml
-        self._mtime = 0.0
+        self._yaml_digest = b""
         self.status = tk.StringVar(value="Load a YAML file to begin.")
         bar = ttk.Frame(root)
         bar.pack(fill="x", padx=6, pady=4)
@@ -102,6 +106,8 @@ class App:
             self._refresh_if_yaml_changed()
             fn()
         except ConfigError as exc:
+            self.tree.delete(*self.tree.get_children())
+            self.s.preview_valid = False
             self.text.delete("1.0", "end")
             self.text.insert("end", "Configuration errors:\n" + "\n".join(exc.errors))
             self.status.set("Configuration invalid")
@@ -110,15 +116,23 @@ class App:
             self.status.set(f"Error: {exc}")
 
     def _refresh_if_yaml_changed(self) -> None:
-        if self.yaml_path and os.path.exists(self.yaml_path) and \
-                os.path.getmtime(self.yaml_path) != self._mtime and self.s.cfg is not None:
+        if not self.yaml_path or self.s.cfg is None:
+            return
+        path = Path(self.yaml_path)
+        if not path.is_file():
+            self.tree.delete(*self.tree.get_children())
+            self.s.preview_valid = False
+            raise ConfigError([f"Input YAML no longer exists: {path}"])
+        if hashlib.sha256(path.read_bytes()).digest() != self._yaml_digest:
             self._load(self.yaml_path)
             self.status.set("YAML changed on disk: reloaded; previews and calculations invalidated")
 
     def _load(self, path: str) -> None:
+        path = str(Path(path).resolve())
         self.s.load_config(path)
         self.scope.set(self.s.cfg.loading.scope)
-        self.yaml_path, self._mtime = path, os.path.getmtime(path)
+        self.yaml_path = path
+        self._yaml_digest = hashlib.sha256(Path(path).read_bytes()).digest()
         self.path_label.config(text=f"YAML: {path}")
         self.text.delete("1.0", "end")
         self.text.insert("end", effective_config_yaml(self.s.cfg))
@@ -145,6 +159,7 @@ class App:
 
     def demo(self) -> None:
         self.s.use_offline_demo()
+        self.tree.delete(*self.tree.get_children())
         self._clear_pressure_results()
         self.status.set("Offline demonstration model opened (synthetic geometry)")
 
@@ -153,6 +168,7 @@ class App:
         pid = int(self.pid.get()) if self.pid.get().strip() else None
         ad = connect_live(pid)
         self.s.connect(ad)
+        self.tree.delete(*self.tree.get_children())
         self._clear_pressure_results()
         i = ad.info()
         self.status.set(f"Connected: {i.path} pid={i.pid} version={i.version} units={i.units} "
@@ -161,6 +177,7 @@ class App:
     def inspect(self) -> None:
         self.s.read_model()
         self.s.categorize()
+        self.tree.delete(*self.tree.get_children())
         self._clear_pressure_results()
         self._show_classification()
         self.status.set(self._classification_status())
@@ -192,12 +209,25 @@ class App:
         self._show_pressure_results()
         self.nb.select(self.pressure_tab)
         self.s.build_plan()
+        selected = set(self.tree.selection())
         self._show_classification()
         self.text.insert("end", "\n--- load plan diagnostics ---\n" + "\n".join(
             f"[{d.level}] {d.code} {d.object_ref}: {d.message}" for d in self.s.plan.diagnostics))
         self.tree.delete(*self.tree.get_children())
         for r in group_table(self.s):
-            self.tree.insert("", "end", values=list(r.values()))
+            self.tree.insert("", "end", iid=r["group"], values=[r[c] for c in GROUP_COLUMNS])
+        retained = selected.intersection(self.tree.get_children())
+        if retained:
+            self.tree.selection_set(sorted(retained))
+        self.text.delete("1.0", "end")
+        self.text.insert("end", effective_config_yaml(self.s.cfg) + "\n--- Calculation results ---\n")
+        for r in self.s.pressures.results.values():
+            self.text.insert("end", f"{r.id}: {r.value:.6g} {r.units}\n")
+        self.text.insert("end", "\n--- Preview diagnostics ---\n")
+        self.text.insert("end", f"Model envelope: {self.s.cats.envelope}\n")
+        for d in self.s.plan.diagnostics:
+            obj = f" ({d.object_ref})" if d.object_ref else ""
+            self.text.insert("end", f"[{d.level}] {d.code}{obj}: {d.message}\n")
         self.status.set(f"Calculated: {len(self.s.pressures.results)} results, "
                         f"{len(self.s.plan.assignments)} assignments. {self._classification_status()}")
 
@@ -270,7 +300,7 @@ class App:
         if not sel:
             self.status.set("Select a row in the group table first")
             return
-        name = self.tree.item(sel[0])["values"][0]
+        name = self.tree.set(sel[0], "group")
         self.s.select_group(str(name))
         self.status.set(f"Selected {name} in ETABS")
 
@@ -333,7 +363,8 @@ def main() -> None:
     import tkinter as tk
 
     ap = argparse.ArgumentParser(description="air-apparent wind loads for ETABS")
-    ap.add_argument("yaml", nargs="?", default="", help="wind inputs YAML to load at startup")
+    ap.add_argument("yaml", nargs="?", default=str(DEFAULT_YAML),
+                    help="wind inputs YAML to load at startup (default: templates/wind_inputs.yaml)")
     args = ap.parse_args()
     root = tk.Tk()
     App(root, args.yaml)

@@ -24,12 +24,14 @@ See the [user guide](docs/user_guide.md) for installation, the complete offline 
 project input preparation, live ETABS steps, exports, and troubleshooting.
 
 ```bash
-air-apparent examples/reference_sample.yaml     # Tkinter GUI (needs a Python build with tkinter)
+air-apparent                                  # loads templates/wind_inputs.yaml
+air-apparent examples/reference_sample.yaml    # optional offline benchmark
 ```
 
 In the GUI: *Load/Reload YAML* -> *Offline demo* (or *Connect ETABS*) -> *Inspect* -> *Calculate* ->
 *Create/Update preview groups* -> inspect groups in ETABS (*Select group*) -> *Review & apply* ->
-*Export report*. YAML is the only source of wind inputs; the GUI displays the effective
+*Export report*. Selecting a group also creates the current preview groups if needed, without
+applying loads. YAML is the only source of wind inputs; the GUI displays the effective
 configuration and never edits it. Editing the YAML file invalidates previews and calculations.
 
 Scripted use:

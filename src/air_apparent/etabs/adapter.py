@@ -303,9 +303,11 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         return list(self.m.LoadPatterns.GetNameList()[1] or [])
 
     def read_cases(self) -> dict[str, tuple[tuple[str, float], ...]]:
+        """Read static-linear terms and retain other case names with no linear terms."""
         out = {}
         for name in self.m.LoadCases.GetNameList()[1] or []:
             if _case_type(self.m.LoadCases.GetTypeOAPI(name), name) != _STATIC_LINEAR_CASE_TYPE:
+                out[name] = ()
                 continue
             r = self.m.LoadCases.StaticLinear.GetLoads(name)
             out[name] = _static_case_terms(r, name)
