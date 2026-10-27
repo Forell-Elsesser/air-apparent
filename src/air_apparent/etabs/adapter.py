@@ -24,10 +24,9 @@ from ..models import (
     Shell,
     Story,
 )
+from .errors import AdapterError
 
-
-class AdapterError(RuntimeError):
-    """A call failed, returned a non-zero API code, or violated its return contract."""
+__all__ = ["AdapterError", "ComEtabsAdapter", "EtabsAdapter", "connect_live", "list_instances"]
 
 
 class EtabsAdapter(Protocol):
