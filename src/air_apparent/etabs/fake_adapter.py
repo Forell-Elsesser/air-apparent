@@ -110,8 +110,11 @@ class FakeAdapter:
         self._op(f"clear:{pattern}:{object_ref}")
         self.assignments.pop((kind, object_ref, pattern), None)
 
-    def read_assignments(self) -> list[Assignment]:
-        return list(self.assignments.values())
+    def read_assignments(self, patterns: set[str] | None = None) -> list[Assignment]:
+        assignments = self.assignments.values()
+        if patterns is not None:
+            assignments = (a for a in assignments if a.pattern in patterns)
+        return list(assignments)
 
     def read_patterns(self) -> list[str]:
         return sorted(set(self.extra_patterns) | set(self.patterns))

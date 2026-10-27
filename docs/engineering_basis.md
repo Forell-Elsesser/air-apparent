@@ -6,7 +6,10 @@ Scope: ASCE 7-10 horizontal MWFRS only. Verification status uses three separate 
    26 cells with source cells, relative tolerance 1e-8). Done.
 2. **Independent engineering check** - agreement with the authoritative ASCE 7-10 text. **Pending.**
    The code references below are those recorded in the workbook; they are not yet confirmed.
-3. **Live ETABS verification** - **Not done** (see `etabs_setup.md`).
+3. **Live ETABS integration** - geometry, API unit handling, preview groups, selection, and existing
+   load read-back were checked against ETABS 23.3.1. Load application and analysis remain unverified
+   because the model/configuration has unresolved layout and object-mapping diagnostics (see
+   `etabs_setup.md`).
 
 ## Workbook references (unverified)
 

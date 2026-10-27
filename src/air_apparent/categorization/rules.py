@@ -46,6 +46,8 @@ from .groups import build_group_specs
 TOL = 0.25  # ft, geometric tolerance
 TOP_TOL = 0.1  # ft, parapet top elevation match tolerance
 EDGE_COVERAGE_MIN = 0.98
+ENVELOPE_LINE_COVERAGE_MIN = 0.25
+ENVELOPE_PAIR_OVERLAP_MIN = 0.25
 
 _Vec = tuple[float, float, float]
 
@@ -93,23 +95,48 @@ def _ph_hit(f: _Facts, ph: Penthouse) -> _Vec | None:
 
 
 def _envelope(cfg: Config, facts: dict[str, _Facts]) -> dict[str, float]:
-    """Dominant wall lines among below-roof, axis-aligned vertical shells."""
+    """Find opposing wall lines using unique projected coverage."""
     main_roof = cfg.roof_planes[0].model_elevation_ft
-    totals: dict[str, dict[float, float]] = {"x": defaultdict(float), "y": defaultdict(float)}
+    projected: dict[str, dict[float, list[tuple[float, float]]]] = {
+        "x": defaultdict(list), "y": defaultdict(list)}
     for f in facts.values():
         if f.vertical and f.axis and f.zmax <= main_roof + TOL:
-            totals[f.axis][round(f.coord * 4) / 4] += f.length
+            projected[f.axis][round(f.coord * 4) / 4].append((f.lo, f.hi))
+
+    def merge_intervals(intervals: list[tuple[float, float]]) -> list[tuple[float, float]]:
+        merged: list[list[float]] = []
+        for lo, hi in sorted(intervals):
+            if merged and lo <= merged[-1][1] + 1e-6:
+                merged[-1][1] = max(merged[-1][1], hi)
+            else:
+                merged.append([lo, hi])
+        return [(lo, hi) for lo, hi in merged]
+
+    def overlap_length(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> float:
+        return sum(max(0.0, min(ahi, bhi) - max(alo, blo))
+                   for alo, ahi in a for blo, bhi in b)
+
     env: dict[str, float] = {}
     for axis, key in (("x", "x"), ("y", "y")):
-        t = totals[axis]
-        if not t:
+        lines = {coord: merge_intervals(intervals) for coord, intervals in projected[axis].items()}
+        coverage = {coord: sum(hi - lo for lo, hi in intervals)
+                    for coord, intervals in lines.items()}
+        if len(coverage) < 2:
             continue
-        big = max(t.values())
-        # Opposite facades can have different opening ratios and mesh densities.
-        # A strict half-maximum cutoff can discard one facade entirely.
-        main = sorted(c for c, v in t.items() if v >= 0.4 * big)
-        if len(main) >= 2:
-            env[f"{key}_min"], env[f"{key}_max"] = main[0], main[-1]
+        largest = max(coverage.values())
+        candidates = [coord for coord, length in coverage.items()
+                      if length >= ENVELOPE_LINE_COVERAGE_MIN * largest]
+        pairs = []
+        for i, first in enumerate(candidates):
+            for second in candidates[i + 1:]:
+                overlap = overlap_length(lines[first], lines[second])
+                smaller_line = min(coverage[first], coverage[second])
+                if overlap >= ENVELOPE_PAIR_OVERLAP_MIN * smaller_line:
+                    low, high = sorted((first, second))
+                    pairs.append((high - low, smaller_line, overlap / smaller_line, overlap, low, high))
+        if pairs:
+            _, _, _, _, low, high = max(pairs)
+            env[f"{key}_min"], env[f"{key}_max"] = low, high
     return env
 
 
@@ -129,9 +156,16 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
                                     f"override target {k!r} is not a shell in the model", k))
 
     have_env = all(k in env for k in ("x_min", "x_max", "y_min", "y_max"))
+    if have_env:
+        have_env = (env["x_max"] - env["x_min"] > TOL
+                    and env["y_max"] - env["y_min"] > TOL)
     if snap.shells and not have_env:
         diags.append(Diagnostic("error", "unsupported_layout",
-                                "cannot determine a rectangular main-building envelope"))
+                                "cannot determine a rectangular main-building envelope with positive "
+                                f"length and width from the below-roof walls; inferred bounds: {env}. "
+                                f"YAML main roof plane = {main_roof:g} ft in model coordinates, "
+                                f"grade datum = {grade:g} ft. Check model units, roof elevation, "
+                                "and the presence of opposing exterior walls in both directions"))
 
     def on_env_edge(f: _Facts) -> _Vec | None:
         if not have_env or not f.axis:
@@ -371,7 +405,6 @@ def _dimensions(cfg, snap, facts, out: Categorization, env, have_env: bool) -> N
                       and abs(f.zmin - zlow) <= TOL)
         if covered < EDGE_COVERAGE_MIN * span:
             out.diagnostics.append(Diagnostic(
-                "warning", "incomplete_envelope_coverage",
+                "error", "unsupported_layout",
                 f"envelope edge {key}={env[key]:g} is only {covered / span:.0%} covered by wall "
-                "shells at the lowest level; check openings, missing cladding and the rectangular "
-                "envelope assumption. Loads cover modeled, load-ready shells only."))
+                "shells at the lowest level; the main-building rectangular layout cannot be confirmed"))

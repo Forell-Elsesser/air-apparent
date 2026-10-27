@@ -68,6 +68,16 @@ def test_eccentric_torsion_is_incremental():
     assert rows[0].eccentricity_ft == 36.0
     with pytest.raises(ValueError):
         eccentric_torsion([("ROOF", 100.0), ("L2", 50.0)], 0.15, 240.0)
+
+
+@pytest.mark.parametrize("value", [0.0, -1.0, float("nan"), float("inf")])
+def test_invalid_derived_plan_dimension_is_rejected(cfg, value):
+    from air_apparent.models import PlanDims
+
+    dims = {"X": PlanDims(100.0, value), "Y": PlanDims(value, 100.0)}
+
+    with pytest.raises(ValueError, match="must be finite and greater than zero"):
+        calculate_pressures(cfg, dims)
 def test_directional_output_ids_preserve_story_and_axis_pressures(cfg):
     from air_apparent.pressures import calculate_pressures
     from air_apparent.reporting import pressure_output_results

@@ -118,11 +118,11 @@ def test_stray_object_does_not_redefine_envelope(cfg, snap):
     assert c.objects["A:STRAY"].load_issue
 
 
-def test_incomplete_wall_coverage_reported_without_assuming_nonrectangular_layout(cfg, snap):
+def test_incomplete_wall_coverage_blocks_unsupported_layout(cfg, snap):
     # remove half of the south face: the envelope edge is no longer fully covered
     kept = [s for s in snap.shells if not s.name.startswith("W_S_L2_") or s.name.endswith(("1", "2"))]
     snap2 = ModelSnapshot(shells=kept, frames=snap.frames, joints=snap.joints, stories=snap.stories)
-    assert any(d.code == "incomplete_envelope_coverage" and d.level == "warning"
+    assert any(d.code == "unsupported_layout" and d.level == "error"
                for d in _cat(cfg, snap2).diagnostics)
 
 
@@ -150,3 +150,36 @@ def test_etabs_dimension_discrepancy_reported(cfg, snap):
     assert c.derived_dims["X"].parallel_l == 1472.0
     ps = calculate_pressures(cfg, c.derived_dims)
     assert ps.dims["X"].parallel_l == 1472.0
+
+
+def test_one_wall_line_per_axis_does_not_produce_zero_plan_dimensions(cfg):
+    snap = ModelSnapshot(shells=[
+        Shell("X", ((0, 0, 0), (0, 100, 0), (0, 100, 30), (0, 0, 30)), (1, 0, 0)),
+        Shell("Y", ((0, 0, 0), (100, 0, 0), (100, 0, 30), (0, 0, 30)), (0, 1, 0)),
+    ])
+    cats = categorize(cfg, snap)
+    assert cats.derived_dims == {}
+    error = next(d for d in cats.diagnostics if d.code == "unsupported_layout" and d.level == "error")
+    assert "positive length and width" in error.message
+    assert "main roof plane" in error.message
+    assert "opposing exterior walls" in error.message
+
+
+def test_envelope_uses_unique_projected_coverage_and_opposing_lines(cfg):
+    shells = []
+    for z0, z1 in ((0.0, 30.0), (30.0, 60.0)):
+        shells.extend([
+            Shell(f"WEST_{z0}_A", ((0, 0, z0), (0, 20, z0), (0, 20, z1), (0, 0, z1)), (1, 0, 0)),
+            Shell(f"WEST_{z0}_B", ((0, 80, z0), (0, 100, z0), (0, 100, z1), (0, 80, z1)), (1, 0, 0)),
+            Shell(f"EAST_{z0}", ((100, 0, z0), (100, 100, z0), (100, 100, z1), (100, 0, z1)),
+                  (-1, 0, 0)),
+            Shell(f"SOUTH_{z0}", ((0, 0, z0), (100, 0, z0), (100, 0, z1), (0, 0, z1)), (0, 1, 0)),
+            Shell(f"NORTH_{z0}", ((0, 100, z0), (100, 100, z0), (100, 100, z1), (0, 100, z1)),
+                  (0, -1, 0)),
+        ])
+    cats = categorize(cfg, ModelSnapshot(shells=shells))
+
+    assert cats.envelope == {"x_min": 0.0, "x_max": 100.0, "y_min": 0.0, "y_max": 100.0}
+    assert cats.derived_dims["X"].parallel_l == 100.0
+    assert any(d.code == "unsupported_layout" and d.level == "error"
+               and "only 40% covered" in d.message for d in cats.diagnostics)
