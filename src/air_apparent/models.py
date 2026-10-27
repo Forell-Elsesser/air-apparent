@@ -219,9 +219,29 @@ class Joint:
 @dataclass(frozen=True)
 class Story:
     name: str
-    elevation_ft: float
+    elevation_ft: float  # top of the story
+    height_ft: float = 0.0
+    is_master: bool = True
+    similar_to: str = ""
     diaphragm: str | None = None
     reference_joint: str | None = None  # joint at the diaphragm centre, if known
+
+
+@dataclass(frozen=True)
+class GridSystem:
+    name: str
+    kind: str  # "Cartesian" | other
+    origin_x_ft: float
+    origin_y_ft: float
+    rotation_deg: float
+
+
+@dataclass(frozen=True)
+class GridLine:
+    system: str
+    axis: str  # "x" for a line of constant X, "y" for a line of constant Y
+    label: str
+    ordinate_ft: float  # global coordinate of the line
 
 
 @dataclass
@@ -229,12 +249,16 @@ class ModelSnapshot:
     shells: list[Shell] = field(default_factory=list)
     frames: list[Frame] = field(default_factory=list)
     joints: list[Joint] = field(default_factory=list)
-    stories: list[Story] = field(default_factory=list)
+    stories: list[Story] = field(default_factory=list)  # bottom-up
     groups: dict[str, list[str]] = field(default_factory=dict)  # name -> object refs
     existing_loads: dict[str, list[str]] = field(default_factory=dict)  # pattern -> object refs
     existing_patterns: list[str] = field(default_factory=list)
     existing_cases: list[str] = field(default_factory=list)
     existing_combos: list[str] = field(default_factory=list)
+    base_elevation_ft: float = 0.0
+    grid_systems: list[GridSystem] = field(default_factory=list)
+    grid_lines: list[GridLine] = field(default_factory=list)
+    labels: dict[str, tuple[str, str]] = field(default_factory=dict)  # object ref -> (label, story)
 
 
 @dataclass(frozen=True)

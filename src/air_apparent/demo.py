@@ -95,7 +95,7 @@ def build_demo_snapshot(cfg: Config) -> ModelSnapshot:
     for b in reversed(cfg.story_bands):
         jn = f"CEN_{b.id}"
         joints.append(Joint(jn, (lx / 2, ly / 2, b.top_model_elevation_ft)))
-        stories.append(Story(b.id, b.top_model_elevation_ft, f"D_{b.id}", jn))
+        stories.append(Story(b.id, b.top_model_elevation_ft, diaphragm=f"D_{b.id}", reference_joint=jn))
     return ModelSnapshot(
         shells=shells, frames=frames, joints=joints, stories=stories,
         groups={"OLD_WALLS": ["A:W_S_L2_1"], "USER_GROUP": ["A:INT_1"]},
