@@ -85,9 +85,10 @@ def group_table(session: WindSession) -> list[dict]:
         for rid in filter(None, g.result_id.split("|")):
             r = ps.results.get(rid)
             vals.append(f"{r.value:.4f} {r.units}" if r else "n/a")
-        out.append({"group": g.name, "category": g.category, "band": g.band, "direction": g.direction,
-                    "role": g.role, "result_id": g.result_id, "value": " | ".join(vals),
-                    "pattern": g.pattern, "members": len(g.members), "sign": g.assignment_sign})
+        out.append({"group": g.name, "category": g.category, "level": g.level, "side": g.side,
+                    "direction": g.direction, "role": g.role, "result_id": g.result_id,
+                    "value": " | ".join(vals), "pattern": g.pattern, "members": len(g.members),
+                    "sign": g.assignment_sign})
     return out
 
 
@@ -149,8 +150,14 @@ def html_report(session: WindSession) -> str:  # noqa: C901
     sec.append("<h2>Object load review</h2>" + _table(
         ["object", "category", "load issue"],
         [[o.ref, o.category, o.load_issue] for o in cats.objects.values() if o.load_issue]))
+    sec.append("<h2>Pattern group comparison</h2><p>The sixteen W_ groups: membership by the rules versus "
+               "the groups already in the model.</p>" + _table(
+        ["group", "by rules", "in model", "in model only", "by rules only"],
+        [[r.name, r.by_rules, r.in_model,
+          f"{len(r.missing_from_rules)} {' '.join(r.missing_from_rules[:5])}".strip(),
+          f"{len(r.extra_in_rules)} {' '.join(r.extra_in_rules[:5])}".strip()] for r in cats.comparison]))
     sec.append("<h2>Group / assignment table</h2>" + _table(
-        ["group", "category", "band", "dir", "role", "result", "value", "pattern", "members", "sign"],
+        ["group", "category", "level", "side", "dir", "role", "result", "value", "pattern", "members", "sign"],
         [list(r.values()) for r in group_table(session)]))
     ecc = [a for a in plan.assignments if a.kind == "joint_moment"]
     sec.append("<h2>Eccentric torsion derivation (provisional)</h2>" + _table(

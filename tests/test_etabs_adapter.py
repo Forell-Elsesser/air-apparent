@@ -170,3 +170,55 @@ def test_read_combinations_uses_case_names_and_factors_from_etabs_results():
     assert adapter.read_combinations() == {
         "W_ENV": ("envelope", (("W1", 1.0), ("W2", 1.0))),
     }
+
+
+def test_read_assignments_uses_documented_tuple_positions():
+    api = SimpleNamespace(
+        AreaObj=SimpleNamespace(GetLoadUniform=lambda n, t: [1, ("A1",), ("W_Wall_+X",), ("Global",), (4,), (0.5,), 0]),
+        PointObj=SimpleNamespace(GetLoadForce=lambda n, t: [1, ("P1",), ("W_Mech_+X",), (0,), ("Global",),
+                                                            (1.5,), (0.0,), (0.0,), (0.0,), (0.0,), (7.0,), 0]),
+        FrameObj=SimpleNamespace(GetLoadDistributed=lambda n, t: [1, ("B1",), ("W_Mech_+Y",), (1,), ("Global",),
+                                                                  (5,), (0,), (1,), (0,), (10,), (0.25,), (0.25,), 0]),
+    )
+    out = {(a.kind, a.object_ref, a.global_dir): a.value for a in _adapter_with_api(api).read_assignments()}
+    assert out[("joint_force", "P:P1", "X")] == 1.5
+    assert out[("joint_moment", "P:P1", "Mz")] == 7.0
+    assert out[("frame_line_load", "F:B1", "Y")] == 0.25
+
+
+def test_read_stories_is_bottom_up_with_heights():
+    story = SimpleNamespace(GetStories_2=lambda: [-0.833, 2, ("R", "L2"), (60.083, 31.5), (28.583, 32.333),
+                                                  (True, True), ("", ""), (False, False), (0, 0), (0, 0), 0])
+    base, stories = ComEtabsAdapter._read_stories(SimpleNamespace(Story=story))
+    assert base == -0.833 and [s.name for s in stories] == ["L2", "R"]
+    assert stories[1].height_ft == 28.583
+
+
+def test_read_groups_filters_prefix_case_insensitively():
+    gd = SimpleNamespace(GetNameList=lambda: [3, ("CLADDING", "w_wall_+x", "W_PH_+Y"), 0],
+                         GetAssignments=lambda g: [1, (5,), ("A7",), 0])
+    groups = _adapter_with_api(SimpleNamespace(GroupDef=gd)).read_groups("W_")
+    assert groups == {"w_wall_+x": ["A:A7"], "W_PH_+Y": ["A:A7"]}
+
+
+def test_set_group_reuses_model_spelling_and_reads_back():  # Review Focus 4
+    calls = []
+    gd = SimpleNamespace(GetNameList=lambda: [1, ("w_wall_+x",), 0],
+                         GetGroup_1=lambda n: [7] + [True] * 13 + [0],
+                         Delete=lambda n: calls.append(("Delete", n)) or 0,
+                         SetGroup_1=lambda n, *a: calls.append(("SetGroup_1", n, a[0])) or 0,
+                         GetAssignments=lambda n: [1, (5,), ("A1",), 0])
+    ao = SimpleNamespace(SetGroupAssign=lambda o, g: calls.append(("assign", o, g)) or (0 if o == "A1" else 3))
+    res = _adapter_with_api(SimpleNamespace(GroupDef=gd, AreaObj=ao)).set_group("W_Wall_+X", ["A:A1", "A:A2"])
+    assert ("Delete", "w_wall_+x") in calls and ("SetGroup_1", "w_wall_+x", 7) in calls
+    assert ("assign", "A1", "w_wall_+x") in calls
+    assert res.refused == (("A:A2", 3),) and res.missing_after_readback == ()
+
+
+def test_set_group_reports_members_missing_after_readback():
+    gd = SimpleNamespace(GetNameList=lambda: [0, (), 0], GetGroup_1=lambda n: [0] + [True] * 13 + [0],
+                         Delete=lambda n: 0, SetGroup_1=lambda n, *a: 0,
+                         GetAssignments=lambda n: [0, (), (), 0])
+    fo = SimpleNamespace(SetGroupAssign=lambda o, g: 0)
+    res = _adapter_with_api(SimpleNamespace(GroupDef=gd, FrameObj=fo)).set_group("W_Mech_+X", ["F:B1"])
+    assert res.refused == () and res.missing_after_readback == ("F:B1",)

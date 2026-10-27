@@ -1,6 +1,7 @@
 import math
 
 from air_apparent.categorization import categorize
+from air_apparent.models import Override
 from air_apparent.patterns import (
     build_assignments,
     build_plan,
@@ -38,27 +39,6 @@ def test_mechanical_assignments(session):
     assert verify_mech_reversibility(session.cfg, ps) == []
 
 
-def test_side_pressures_under_wall_pattern_and_ph_not_duplicated(session):
-    a = session.plan.assignments
-    ph_side = [x for x in a if x.object_ref.startswith("A:PH1_") and x.pattern == "W_Wall_+X"]
-    assert ph_side, "penthouse side shells must receive W_Wall side pressure"
-    assert all(x.result_id == "WALL_SIDE_MIN" for x in ph_side)
-    assert not [x for x in a if x.pattern.startswith("W_PH_") and "SIDE" in x.result_id]
-    ph_x = [x for x in a if x.pattern == "W_PH_+X"]
-    # only windward body faces carry the net force; leeward body faces carry none
-    assert {x.object_ref for x in ph_x} == {"A:PH1_W", "A:PH2_W"}
-    parapet_side = [x for x in a if x.pattern == "W_Wall_+X" and x.object_ref.startswith("A:P_N")]
-    assert parapet_side and all(x.result_id == "WALL_SIDE_MIN" for x in parapet_side)
-
-
-def test_missing_ph_side_regression_with_synthetic_object(cfg, snap):
-    """A penthouse side shell with an arbitrary name must always get its side pressure."""
-    from dataclasses import replace
-    snap.shells[:] = [replace(s, name="1604") if s.name == "PH1_N" else s for s in snap.shells]
-    c = categorize(cfg, snap)
-    a, _ = build_assignments(cfg, snap, c, calculate_pressures(cfg))
-    assert any(x.object_ref == "A:1604" and x.pattern == "W_Wall_+X" for x in a)
-    assert c.objects["A:1604"].category == "penthouse_body"
 
 
 def test_minus_x_uses_max_branch(session):
@@ -105,3 +85,37 @@ def test_partial_equipment_mapping_still_blocks_force_loss(cfg, snap):
     c = categorize(cfg, snap)
     plan = build_plan(cfg, snap, c, calculate_pressures(cfg))
     assert any(d.code == "force_conservation" and d.level == "error" for d in plan.diagnostics)
+
+
+def test_side_faces_follow_their_family_pattern(session):
+    a = session.plan.assignments
+    ph_side = [x for x in a if x.object_ref in ("A:PH1_N", "A:PH1_S") and x.pattern == "W_PH_+X"]
+    assert len(ph_side) == 2 and all(x.result_id == "WALL_SIDE_MIN" for x in ph_side)
+    windward = {x.object_ref for x in a if x.pattern == "W_PH_+X" and x.result_id.startswith("PH_")}
+    assert windward == {"A:PH1_W", "A:PH2_W"}
+    parapet_side = [x for x in a if x.object_ref.startswith("A:P_N") and x.pattern == "W_Parapet_+X"]
+    assert parapet_side and all(x.result_id == "WALL_SIDE_MIN" for x in parapet_side)
+    wall_targets = {x.object_ref for x in a if x.pattern.startswith("W_Wall_")}
+    assert not any(r.startswith(("A:P_", "A:PH")) for r in wall_targets)
+
+
+def test_penthouse_side_shell_with_arbitrary_name(cfg, snap):
+    """A penthouse side shell gets its side pressure under W_PH whatever it is called."""
+    from dataclasses import replace
+    snap.shells[:] = [replace(s, name="1604") if s.name == "PH1_N" else s for s in snap.shells]
+    c = categorize(cfg, snap)
+    a, _ = build_assignments(cfg, snap, c, calculate_pressures(cfg))
+    assert c.objects["A:1604"].category == "penthouse_body"
+    assert any(x.object_ref == "A:1604" and x.pattern == "W_PH_+X" and x.result_id == "WALL_SIDE_MIN" for x in a)
+
+
+def test_frames_only_equipment_is_deferred(cfg, snap):
+    from dataclasses import replace
+    first = replace(cfg.equipment[0], support_joints=(), support_frames=("PL1_A", "PL1_B", "PL1_C", "PL1_D"))
+    cfg2 = replace(cfg, equipment=(first,) + cfg.equipment[1:])
+    plan = build_plan(cfg2, snap, categorize(cfg2, snap), calculate_pressures(cfg2))
+    assert any(d.code == "equipment_loads_deferred" and "CHILLER01" in d.message for d in plan.diagnostics)
+    assert not [d for d in plan.diagnostics if d.code == "force_conservation"]
+    assert len([x for x in plan.assignments if x.pattern == "W_Mech_X" and x.kind == "joint_force"]) == 68
+    assert "AA_PREVIEW" not in " ".join(d.message for d in plan.diagnostics)
+    assert Override  # imported for symmetry with the categorization tests

@@ -1,21 +1,21 @@
 """Whole-model categorization and preview-group specifications (no GUI, no ETABS)."""
 
 from .groups import (
-    PREFIX,
-    STAIR_GROUP,
-    UNRESOLVED_GROUP,
+    build_group_specs,
+    build_pattern_groups,
+    compare_groups,
     detect_group_conflicts,
     face_role,
-    reconcile_membership,
 )
-from .rules import categorize
+from .rules import categorize, categorize_frames, categorize_shells
 
 __all__ = [
-    "PREFIX",
-    "STAIR_GROUP",
-    "UNRESOLVED_GROUP",
+    "build_group_specs",
+    "build_pattern_groups",
     "categorize",
+    "categorize_frames",
+    "categorize_shells",
+    "compare_groups",
     "detect_group_conflicts",
     "face_role",
-    "reconcile_membership",
 ]

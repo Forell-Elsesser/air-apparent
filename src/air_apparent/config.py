@@ -18,10 +18,14 @@ from .models import (
     BRANCHES,
     CATEGORIES,
     DIRECTIONS,
+    CategorizationSettings,
     Config,
     Equipment,
+    ExteriorSegment,
     GeometryConfig,
+    LevelRoles,
     LoadingConfig,
+    Override,
     ParapetType,
     Penthouse,
     PlanDims,
@@ -31,7 +35,8 @@ from .models import (
     WindInputs,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+OUTSIDE_CHOICES = ("+X", "-X", "+Y", "-Y", "none")
 PARAPET_KINDS = ("main_roof", "picture_frame", "penthouse")
 
 
@@ -152,12 +157,15 @@ def parse_config(text: str, source_path: str = "") -> Config:
 def validate_config(data: Any, source_path: str = "") -> Config:  # noqa: C901
     c = _Checker()
     top_req = ("schema_version", "code_edition", "units", "wind", "geometry", "loading",
-               "grade", "story_bands")
-    top_opt = ("parapets", "penthouses", "equipment", "platforms", "rooftop", "overrides")
+               "grade", "story_bands", "exterior_segments", "levels")
+    top_opt = ("parapets", "penthouses", "equipment", "platforms", "rooftop", "overrides", "categorization")
     d = c.mapping(data, "", top_req, top_opt)
 
     version = d.get("schema_version")
-    if "schema_version" in d and version != SCHEMA_VERSION:
+    if version == 1:
+        c.err("schema_version", "1 is no longer supported; add exterior_segments and levels "
+                                "(see docs/module_interfaces.md)")
+    elif "schema_version" in d and version != SCHEMA_VERSION:
         c.err("schema_version", f"unsupported version {version!r}; expected {SCHEMA_VERSION}")
     edition = c.string(d, "code_edition", "")
     if "units" in d and d["units"] != "US":
@@ -247,10 +255,10 @@ def validate_config(data: Any, source_path: str = "") -> Config:  # noqa: C901
     loading = LoadingConfig(dict(branches), ecc, mech or "", shears, scope)
 
     # grade / roof planes
-    gr = c.mapping(d.get("grade"), "grade", ("datum_model_elevation_ft", "roof_planes"))
+    gr = c.mapping(d.get("grade"), "grade", ("datum_model_elevation_ft",), ("roof_planes",))
     datum = c.number(gr, "datum_model_elevation_ft", "grade")
     roofs = []
-    for i, r in enumerate(_list(c, gr.get("roof_planes"), "grade.roof_planes")):
+    for i, r in enumerate(_list(c, gr.get("roof_planes"), "grade.roof_planes", optional=True)):
         p = f"grade.roof_planes[{i}]"
         m = c.mapping(r, p, ("id", "model_elevation_ft"))
         roofs.append(RoofPlane(c.string(m, "id", p), c.number(m, "model_elevation_ft", p)))
@@ -316,15 +324,21 @@ def validate_config(data: Any, source_path: str = "") -> Config:  # noqa: C901
     for i, m0 in enumerate(_list(c, d.get("equipment"), "equipment", optional=True)):
         p = f"equipment[{i}]"
         m = c.mapping(m0, p, ("id", "centroid_elevation_above_grade_ft", "height_ft", "extent_x_ft",
-                              "extent_y_ft", "support_joints"))
-        joints = c.str_list(m, "support_joints", p)
-        if len(joints) != 4:
+                              "extent_y_ft"), ("support_joints", "support_frames"))
+        joints = c.str_list(m, "support_joints", p) if "support_joints" in m else ()
+        frames = c.str_list(m, "support_frames", p) if "support_frames" in m else ()
+        if "support_joints" in m and len(joints) != 4:
             c.err(f"{p}.support_joints", "must list exactly 4 existing support joints")
+        if "support_frames" in m and len(frames) != 4:
+            c.err(f"{p}.support_frames", "must list exactly 4 existing support beams")
+        if "support_joints" not in m and "support_frames" not in m:
+            c.err(p, "needs support_frames (W_Mech grouping) and/or support_joints (joint loads)")
         eq.append(Equipment(c.string(m, "id", p),
                             c.number(m, "centroid_elevation_above_grade_ft", p, positive=True),
                             c.number(m, "height_ft", p, positive=True),
                             c.number(m, "extent_x_ft", p, positive=True),
-                            c.number(m, "extent_y_ft", p, positive=True), joints))
+                            c.number(m, "extent_y_ft", p, positive=True),
+                            support_joints=joints, support_frames=frames))
     _unique(c, [x.id for x in eq], "equipment")
     all_joints = [j for e in eq for j in e.support_joints]
     if len(set(all_joints)) != len(all_joints):
@@ -349,14 +363,23 @@ def validate_config(data: Any, source_path: str = "") -> Config:  # noqa: C901
 
     # overrides
     ov_raw = d.get("overrides", {}) or {}
-    ov: dict[str, str] = {}
+    ov: dict[str, Override] = {}
     if not isinstance(ov_raw, dict):
-        c.err("overrides", "must be a mapping of object name -> category")
+        c.err("overrides", "must be a mapping of object name -> category or {category, component, outside}")
     else:
         for k, v in ov_raw.items():
-            if v not in CATEGORIES:
-                c.err(f"overrides.{k}", f"must be one of {list(CATEGORIES)}, got {v!r}")
-            ov[str(k)] = v
+            p = f"overrides.{k}"
+            if isinstance(v, str):
+                v = {"category": v}
+            m = c.mapping(v, p, ("category",), ("component", "outside"))
+            cat = c.choice(m, "category", p, CATEGORIES) or ""
+            comp = c.string(m, "component", p, default="")
+            out = c.choice(m, "outside", p, OUTSIDE_CHOICES[:4], default="") or ""
+            ov[str(k)] = Override(cat, comp, out)
+
+    segments = _exterior_segments(c, d.get("exterior_segments"))
+    settings = _categorization_settings(c, d.get("categorization", {}) or {})
+    levels = _levels(c, d.get("levels"))
 
     if c.errors:
         raise ConfigError(c.errors)
@@ -367,9 +390,62 @@ def validate_config(data: Any, source_path: str = "") -> Config:  # noqa: C901
         geometry=geometry, loading=loading, grade_datum_model_elevation_ft=datum,
         roof_planes=tuple(roofs), story_bands=tuple(bands), parapets=tuple(parapets),
         penthouses=tuple(phs), equipment=tuple(eq), platforms=tuple(pls),
-        rooftop_net_force_coefficient_cf=cf, overrides=ov, raw=normalized,
-        source_path=source_path,
+        rooftop_net_force_coefficient_cf=cf, overrides=ov, exterior_segments=segments,
+        categorization=settings, levels=levels, raw=normalized, source_path=source_path,
     )
+
+
+def _ref(c: _Checker, m: dict, key: str, path: str):
+    """A grid label (string) or an ordinate in feet (number)."""
+    p = f"{path}.{key}"
+    if key not in m:
+        c.err(p, "required value is missing")
+        return ""
+    v = m[key]
+    if isinstance(v, bool) or not isinstance(v, (int, float, str)) or (isinstance(v, str) and not v.strip()):
+        c.err(p, f"must be a grid label or a number in feet, got {v!r}")
+        return ""
+    return float(v) if isinstance(v, (int, float)) else v
+
+
+def _exterior_segments(c: _Checker, raw: Any) -> tuple[ExteriorSegment, ...]:
+    out: list[ExteriorSegment] = []
+    for i, m0 in enumerate(_list(c, raw, "exterior_segments", nonempty=True)):
+        p = f"exterior_segments[{i}]"
+        m = c.mapping(m0, p, ("id", "along", "from", "to", "outside"), ("axis", "z_from", "z_to"))
+        along = _ref(c, m, "along", p)
+        start = _ref(c, m, "from", p)
+        end = _ref(c, m, "to", p)
+        outside = c.choice(m, "outside", p, OUTSIDE_CHOICES) or ""
+        axis = c.choice(m, "axis", p, ("x", "y"), default="") or ""
+        if isinstance(along, float) and not axis:
+            c.err(f"{p}.axis", "required when along is a number (x for a line of constant X, y for constant Y)")
+        if axis and outside and outside != "none" and outside[1].lower() != axis:
+            c.err(f"{p}.outside", f"must be perpendicular to a line of constant {axis.upper()}")
+        z_from = c.number(m, "z_from", p) if "z_from" in m else None
+        z_to = c.number(m, "z_to", p) if "z_to" in m else None
+        if z_from is not None and z_to is not None and z_to <= z_from:
+            c.err(f"{p}.z_to", "must exceed z_from")
+        out.append(ExteriorSegment(c.string(m, "id", p), along, start, end, outside, axis, z_from, z_to))
+    _unique(c, [s.id for s in out], "exterior_segments")
+    return tuple(out)
+
+
+def _categorization_settings(c: _Checker, raw: Any) -> CategorizationSettings:
+    m = c.mapping(raw, "categorization", (), ("plane_tolerance_ft", "extent_tolerance_ft", "level_tolerance_ft"))
+    return CategorizationSettings(
+        c.number(m, "plane_tolerance_ft", "categorization", positive=True, default=0.1),
+        c.number(m, "extent_tolerance_ft", "categorization", positive=True, default=0.5),
+        c.number(m, "level_tolerance_ft", "categorization", positive=True, default=0.05))
+
+
+def _levels(c: _Checker, raw: Any) -> LevelRoles | None:
+    m = c.mapping(raw, "levels", ("main_roof", "parapet", "penthouse_body", "penthouse_parapet", "mechanical"))
+    if not m:
+        return None
+    return LevelRoles(c.string(m, "main_roof", "levels"), c.str_list(m, "parapet", "levels"),
+                      c.str_list(m, "penthouse_body", "levels"), c.str_list(m, "penthouse_parapet", "levels"),
+                      c.string(m, "mechanical", "levels"))
 
 
 def _list(c: _Checker, v: Any, path: str, *, nonempty=False, optional=False) -> list:
@@ -394,6 +470,9 @@ def _normalize(d: dict, cf: float) -> dict:
     out = copy.deepcopy(d)
     out.setdefault("rooftop", {})["net_force_coefficient_cf"] = cf
     out.setdefault("overrides", {})
+    out.setdefault("categorization", {})
+    for key, default in (("plane_tolerance_ft", 0.1), ("extent_tolerance_ft", 0.5), ("level_tolerance_ft", 0.05)):
+        out["categorization"].setdefault(key, default)
     for key in ("parapets", "penthouses", "equipment", "platforms"):
         out.setdefault(key, {"types": []} if key == "parapets" else [])
     return out

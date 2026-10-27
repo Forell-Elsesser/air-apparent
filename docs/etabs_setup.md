@@ -52,3 +52,33 @@ partial state is reported (no rollback).
 5. Confirm joint forces, frame loads, cases (including `W_Mech_-X = -1.0 x W_Mech_X`) and combinations.
 6. Run the analysis; compare base shear with the exported resultants (`Fx, Fy, Mz about origin`).
 7. Re-apply and confirm no accumulation; export the report.
+
+## Phase 1 verified (2026-10-27, ETABS 23.4.0 beta, Test Model seven-story version)
+
+`python -m air_apparent.capture --pid <pid> out.json` read the live model in about two seconds:
+
+- `Story.GetStories_2` returned the stories **bottom-up** (L2 first) on this build; the reader sorts by
+  elevation and never relies on the order. Base -0.833 ft; L2 31.5; R 60.083; Parapet_1 65.083;
+  Mech 70.708; Penthouse 75.167; Parapet_2 76.917 ft, all matching the `$et` export.
+- Grid lines come from the database table whose key and name are both `Grid Definitions - Grid Lines`
+  (columns `Name, LineType, ID, Ordinate, BubbleLoc, Visible`; `LineType` reads `X (Cartesian)` /
+  `Y (Cartesian)`). Grid systems (origin, rotation) come from `Grid Definitions - General`
+  (`Name, Type, Ux, Uy, Rz`). Table values follow the present units and the `UnitsString` reported by
+  `GetAllFieldsInTable` changes with them, so the reader converts by that string. 13 X lines (28 at 0
+  to 39 at 421.75 ft) and 5 Y lines (J 0 to E 238 ft) matched the `$et`.
+- `AreaObj.GetAllAreas` returned 1425 areas with `PointDelimiter[i]` = 0-based index of the last
+  boundary point of area i (inclusive). 222 frames, 2782 points, 44 groups of which 16 start with `W_`.
+- comtypes 1.4.17 wrappers accept calls without placeholder arguments for by-ref parameters; the
+  out-parameters come back as a list in declaration order with the return code last.
+- `AreaObj.GetLoadUniform("All", 1)` and `PointObj.GetLoadForce("All", 1)` returned code 1 on this
+  build, so `read_assignments` falls back to one call per object when the group route is refused.
+- Checklist items 1 (explicit pid selection) and 2 (geometry read) above are done; the local-axis-3
+  visual check is not needed by categorization, which never uses local axes.
+
+## Group write-back verified (2026-10-27, same build)
+
+`WindSession.write_pattern_groups()` wrote all sixteen `W_*` groups to the open Test Model in about
+1.2 seconds (one `SetGroupAssign` per member after `GetGroup_1`, `Delete`, `SetGroup_1`), ETABS
+refused no object, and `check_group_drift()` read back exactly the rule membership. Area objects are
+groupable through the API on ETABS 23.4. Present units were restored on `close()`. The model was not
+saved. Checklist item 3 above is therefore done for the `W_*` groups.
