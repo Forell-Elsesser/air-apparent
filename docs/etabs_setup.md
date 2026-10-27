@@ -20,7 +20,7 @@ run. Treat it as unverified until every item of the checklist below is signed of
 | Item | Convention used | Verify against installed API docs |
 | --- | --- | --- |
 | Shell pressure | `AreaObj.SetLoadUniform(name, pattern, value, Dir=3 (local 3), Replace=True)`; value = code pressure x sign, where sign = +1 if local axis 3 points into the building | Dir code, sign convention, return values |
-| Local axis 3 | row 3 of `AreaObj.GetTransformationMatrix` | indexing, global vs local |
+| Local axis 3 | column 3 (indices 2, 5, 8) of `AreaObj.GetTransformationMatrix` | global normal verified on a live X-facing wall |
 | Equipment | `PointObj.SetLoadForce` on existing joints (not frame-end loads) | argument order |
 | Platform | `FrameObj.SetLoadDistributed` global X/Y, force/length | Dir codes |
 | Eccentric torsion | joint moment Mz at each story's diaphragm reference joint | how stories/diaphragms expose a reference joint |

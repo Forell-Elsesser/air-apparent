@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from air_apparent.config import load_config
+from air_apparent.config import parse_config
 from air_apparent.demo import build_demo_snapshot
 from air_apparent.workflow import WindSession
 
@@ -13,7 +13,9 @@ TEMPLATE = ROOT / "templates" / "wind_inputs.yaml"
 
 @pytest.fixture
 def cfg():
-    return load_config(REFERENCE)
+    # Exercise all load families in the benchmark suite, independent of the GUI's chosen scope.
+    return parse_config(REFERENCE.read_text().replace("scope: walls_parapets", "scope: all"),
+                        source_path=str(REFERENCE))
 
 
 @pytest.fixture
@@ -25,6 +27,7 @@ def snap(cfg):
 def session():
     s = WindSession()
     s.load_config(str(REFERENCE))
+    s.set_loading_scope("all")
     s.use_offline_demo()
     s.read_model()
     s.calculate()

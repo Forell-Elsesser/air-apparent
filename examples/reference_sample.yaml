@@ -39,6 +39,8 @@ geometry:
       perpendicular_b: 1472.0             # Chp 26!C22 = B21
 
 loading:
+  # Current workflow: wall/parapet component loads only. Use all to enable equipment/torsion.
+  scope: walls_parapets
   # Project example reflecting the later review of v5-3: -X uses Max, others keep Min.
   # This is a project choice, not a universal rule.
   wall_pressure_branch_by_direction:

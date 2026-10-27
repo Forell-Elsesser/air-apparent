@@ -68,3 +68,22 @@ def test_eccentric_torsion_is_incremental():
     assert rows[0].eccentricity_ft == 36.0
     with pytest.raises(ValueError):
         eccentric_torsion([("ROOF", 100.0), ("L2", 50.0)], 0.15, 240.0)
+def test_directional_output_ids_preserve_story_and_axis_pressures(cfg):
+    from air_apparent.pressures import calculate_pressures
+    from air_apparent.reporting import pressure_output_results
+
+    ps = calculate_pressures(cfg)
+    groups = pressure_output_results(ps)
+    expected = [f"W_{family}_{d}" for family in ("Parapet", "PH") for d in ("-X", "-Y", "+X", "+Y")]
+    expected += [f"W_Wall_Story{n}_{d}" for d in ("-X", "-Y", "+X", "+Y") for n in (1, 2)]
+    assert [g.id for g in groups] == expected
+    by_id = {g.id: g for g in groups}
+    x = by_id["W_Wall_Story1_-X"]
+    y = by_id["W_Wall_Story1_-Y"]
+    assert x.story_band == "L2"
+    assert by_id["W_Wall_Story2_+X"].story_band == "ROOF"
+    assert x.components[0].value == ps.value("WALL_WW_L2_MAX")
+    assert x.components[2].value == ps.value("WALL_LW_X_MAX")
+    assert y.components[2].value == ps.value("WALL_LW_Y_MAX")
+    assert x.components[2].value != y.components[2].value
+    assert len(ps.results) == 85

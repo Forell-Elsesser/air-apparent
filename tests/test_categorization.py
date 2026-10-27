@@ -1,5 +1,7 @@
 from dataclasses import replace
 
+import pytest
+
 from air_apparent.categorization import categorize, detect_group_conflicts, face_role
 from air_apparent.models import ModelSnapshot, Shell
 from air_apparent.pressures import calculate_pressures
@@ -29,6 +31,19 @@ def test_face_roles_per_direction():
     assert face_role((0, 1, 0), "+X") == "SIDE"
     assert face_role((1, 0, 0), "-X") == "WINDWARD"
     assert face_role((0, -1, 0), "+Y") == "WINDWARD"
+
+
+def test_unequal_opposite_facades_do_not_collapse_envelope(cfg, snap):
+    # Openings leave less than half the wall length on one end facade.
+    snap.shells[:] = [s for s in snap.shells if not s.name.startswith("W_W_")]
+    snap.shells.append(Shell("WEST", ((0, 0, 0), (0, 110, 0), (0, 110, 31.5), (0, 0, 31.5)),
+                             (-1, 0, 0)))
+    snap.shells.append(Shell("WEST_UPPER", ((0, 0, 31.5), (0, 110, 31.5), (0, 110, 62), (0, 0, 62)),
+                             (-1, 0, 0)))
+    c = _cat(cfg, snap)
+    assert c.envelope["x_min"] == 0
+    assert c.envelope["x_max"] == 1472
+    assert c.objects["A:WEST"].category == "main_wall"
 
 
 def test_group_naming_granular_and_stable(cfg, snap):
@@ -69,9 +84,29 @@ def test_crossing_shell_reported_for_subdivision(cfg, snap):
     snap2 = ModelSnapshot(shells=snap.shells[1:] + [tall], frames=snap.frames, joints=snap.joints,
                           stories=snap.stories)
     c = _cat(cfg, snap2)
-    assert c.objects["A:TALL"].category == "unresolved"
+    assert c.objects["A:TALL"].category == "main_wall"
+    assert c.objects["A:TALL"].load_issue
     assert any(d.code == "needs_subdivision" and "band" in d.message for d in c.diagnostics)
-    assert "AA_PREVIEW_UNRESOLVED" in {g.name for g in c.groups}
+    assert "AA_PREVIEW_REVIEW_MAIN_WALL" in {g.name for g in c.groups}
+    assert all(not g.pattern for g in c.groups if "A:TALL" in g.members)
+
+
+@pytest.mark.parametrize("corners, expected", [
+    (((0, 0, -1), (10, 0, -1), (10, 0, 31.5), (0, 0, 31.5)), "main_wall"),
+    (((0, 0, 62), (10, 0, 62), (10, 0, 80), (0, 0, 80)), "main_roof_parapet"),
+    (((0, 0, 0), (10, 0, 0), (10, 10, 5), (0, 10, 5)), "excluded"),
+])
+def test_geometry_issues_have_categories_separate_from_load_readiness(cfg, snap, corners, expected):
+    from air_apparent.patterns.assign import build_assignments
+
+    snap.shells.append(Shell("REVIEW", corners, (0, -1, 0)))
+    c = _cat(cfg, snap)
+    obj = c.objects["A:REVIEW"]
+    assert obj.category == expected
+    assert obj.load_issue
+    assert all(o.category != "unresolved" for o in c.objects.values())
+    assignments, _ = build_assignments(cfg, snap, c, calculate_pressures(cfg))
+    assert not any(a.object_ref == "A:REVIEW" for a in assignments)
 
 
 def test_stray_object_does_not_redefine_envelope(cfg, snap):
@@ -79,20 +114,22 @@ def test_stray_object_does_not_redefine_envelope(cfg, snap):
     snap.shells.append(stray)
     c = _cat(cfg, snap)
     assert c.envelope["x_max"] == 1472.0
-    assert c.objects["A:STRAY"].category == "unresolved"
+    assert c.objects["A:STRAY"].category == "main_wall"
+    assert c.objects["A:STRAY"].load_issue
 
 
-def test_unsupported_layout_detected(cfg, snap):
+def test_incomplete_wall_coverage_reported_without_assuming_nonrectangular_layout(cfg, snap):
     # remove half of the south face: the envelope edge is no longer fully covered
     kept = [s for s in snap.shells if not s.name.startswith("W_S_L2_") or s.name.endswith(("1", "2"))]
     snap2 = ModelSnapshot(shells=kept, frames=snap.frames, joints=snap.joints, stories=snap.stories)
-    assert any(d.code == "unsupported_layout" and d.level == "error" for d in _cat(cfg, snap2).diagnostics)
+    assert any(d.code == "incomplete_envelope_coverage" and d.level == "warning"
+               for d in _cat(cfg, snap2).diagnostics)
 
 
 def test_override_and_missing_objects(cfg, snap):
     cfg2 = replace(cfg, overrides={"INT_1": "stair_projection", "NOPE": "excluded"})
     c = _cat(cfg2, snap)
-    assert c.objects["A:INT_1"].category in ("stair_projection", "unresolved")
+    assert c.objects["A:INT_1"].category == "stair_projection"
     assert any(d.code == "override_unknown_object" for d in c.diagnostics)
 
 

@@ -90,3 +90,18 @@ def test_missing_story_shears_keeps_pattern_empty_and_flagged(cfg, snap):
     plan = build_plan(cfg2, snap, c, calculate_pressures(cfg2))
     assert any(d.code == "ecc_no_shears" for d in plan.diagnostics)
     assert len(plan.patterns) == 18
+
+
+def test_absent_equipment_is_reported_without_false_force_conservation_error(cfg, snap):
+    snap.joints[:] = [j for j in snap.joints if not j.name.startswith("CH01_")]
+    c = categorize(cfg, snap)
+    plan = build_plan(cfg, snap, c, calculate_pressures(cfg))
+    assert any(d.code == "equipment_not_in_model" and "CHILLER01" in d.message for d in plan.diagnostics)
+    assert not any(d.code == "force_conservation" and "CHILLER01" in d.message for d in plan.diagnostics)
+
+
+def test_partial_equipment_mapping_still_blocks_force_loss(cfg, snap):
+    snap.joints[:] = [j for j in snap.joints if j.name != "CH01_J1"]
+    c = categorize(cfg, snap)
+    plan = build_plan(cfg, snap, c, calculate_pressures(cfg))
+    assert any(d.code == "force_conservation" and d.level == "error" for d in plan.diagnostics)

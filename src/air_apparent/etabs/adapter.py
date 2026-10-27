@@ -56,6 +56,7 @@ class EtabsAdapter(Protocol):
 _PROG_ID = "CSI.ETABS.API.ETABSObject"
 _KIP_FT_F = 4  # eUnits.kip_ft_F
 _DIR_CODE = {"X": 4, "Y": 5, "Local3": 3}
+_STATIC_LINEAR_CASE_TYPE = 1  # eLoadCaseType.StaticLinear
 
 
 def list_instances() -> list[tuple[int, str]]:
@@ -85,8 +86,43 @@ def connect_live(pid: int | None = None) -> ComEtabsAdapter:
 
 
 def _ok(ret, what: str) -> None:
+    # comtypes includes updated in/out arguments before the final API status,
+    # e.g. StaticLinear.SetLoads returns [LoadType, LoadName, SF, 0].
+    if isinstance(ret, (list, tuple)) and ret:
+        ret = ret[-1]
     if ret != 0:
         raise AdapterError(f"{what} failed (return code {ret})")
+
+
+def _static_case_terms(response, name: str) -> tuple[tuple[str, float], ...]:
+    if len(response) != 5:
+        raise AdapterError(f"LoadCases.StaticLinear.GetLoads({name}) returned an unexpected result")
+    count, _, load_names, scale_factors, ret = response
+    _ok(ret, f"LoadCases.StaticLinear.GetLoads({name})")
+    if count == 0:
+        return ()
+    if len(load_names) != count or len(scale_factors) != count:
+        raise AdapterError(f"LoadCases.StaticLinear.GetLoads({name}) returned inconsistent item counts")
+    return tuple(zip(load_names, scale_factors, strict=True))
+
+
+def _case_type(response, name: str) -> int:
+    # ETABS returns CaseType, SubType, then the API return code through comtypes.
+    # Also accept the two-value form used by wrappers that omit SubType.
+    if not isinstance(response, (list, tuple)) or len(response) not in (2, 3):
+        raise AdapterError(
+            f"LoadCases.GetTypeOAPI({name}) returned an unexpected result: {response!r}"
+        )
+    case_type, ret = response[0], response[-1]
+    _ok(ret, f"LoadCases.GetTypeOAPI({name})")
+    return case_type
+
+
+def _area_local3(response, name: str) -> tuple[float, float, float]:
+    val, ret = response
+    _ok(ret, f"AreaObj.GetTransformationMatrix({name})")
+    # Columns transform local basis vectors into global coordinates.
+    return (val[2], val[5], val[8])
 
 
 class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
@@ -133,8 +169,7 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         for name in m.AreaObj.GetNameList()[1] or []:
             _, plist, r = m.AreaObj.GetPoints(name)
             _ok(r, f"AreaObj.GetPoints({name})")
-            val = m.AreaObj.GetTransformationMatrix(name)[0]
-            local3 = tuple(val[6:9])
+            local3 = _area_local3(m.AreaObj.GetTransformationMatrix(name), name)
             snap.shells.append(Shell(name, tuple(pts[p] for p in plist), local3,
                                      tuple(member_of.get(f"A:{name}", ()))))
         for name in m.FrameObj.GetNameList()[1] or []:
@@ -147,7 +182,7 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         snap.groups = groups
         snap.existing_patterns = self.read_patterns()
         snap.existing_cases = list(self.read_cases())
-        snap.existing_combos = list(self.read_combinations())
+        snap.existing_combos = list(self.m.RespCombo.GetNameList()[1] or [])
         return snap
 
     def read_groups(self) -> dict[str, list[str]]:
@@ -270,14 +305,21 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
     def read_cases(self) -> dict[str, tuple[tuple[str, float], ...]]:
         out = {}
         for name in self.m.LoadCases.GetNameList()[1] or []:
+            if _case_type(self.m.LoadCases.GetTypeOAPI(name), name) != _STATIC_LINEAR_CASE_TYPE:
+                continue
             r = self.m.LoadCases.StaticLinear.GetLoads(name)
-            out[name] = tuple(zip(r[3], r[4], strict=False)) if r and r[0] else ()
+            out[name] = _static_case_terms(r, name)
         return out
 
     def read_combinations(self) -> dict[str, tuple[str, tuple[tuple[str, float], ...]]]:
         out = {}
         for name in self.m.RespCombo.GetNameList()[1] or []:
-            r = self.m.RespCombo.GetCaseList(name)
-            kind = "envelope" if self.m.RespCombo.GetTypeCombo(name)[0] == 1 else "linear"
-            out[name] = (kind, tuple(zip(r[3], r[4], strict=False)))
+            count, _, names, factors, ret = self.m.RespCombo.GetCaseList(name)
+            _ok(ret, f"RespCombo.GetCaseList({name})")
+            if len(names or ()) != count or len(factors or ()) != count:
+                raise AdapterError(f"RespCombo.GetCaseList({name}) returned inconsistent item counts")
+            combo_type, ret = self.m.RespCombo.GetTypeCombo(name)
+            _ok(ret, f"RespCombo.GetTypeCombo({name})")
+            kind = "envelope" if combo_type == 1 else "linear"
+            out[name] = (kind, tuple(zip(names or (), factors or (), strict=True)))
         return out

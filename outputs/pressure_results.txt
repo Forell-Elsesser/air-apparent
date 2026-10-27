@@ -1,0 +1,135 @@
+Input: examples\reference_sample.yaml
+Edition: ASCE 7-10
+Directional result IDs with component pressures in psf.
+Status: sample/workbook reproduction; not independently project-validated.
+Results: 16
+
+Each result groups pressures for its wind direction; it is not a single pressure value.
+
+W_Parapet_-X
+Parapet pressures for -X wind
+  main_roof parapet TYP windward                        54.676374 psf
+  main_roof parapet TYP leeward                        -36.450916 psf
+  picture_frame parapet PF windward                     55.632394 psf
+  picture_frame parapet PF leeward                     -37.088263 psf
+  penthouse parapet PHP windward                        56.288522 psf
+  penthouse parapet PHP leeward                        -37.525681 psf
+
+W_Parapet_-Y
+Parapet pressures for -Y wind
+  main_roof parapet TYP windward                        54.676374 psf
+  main_roof parapet TYP leeward                        -36.450916 psf
+  picture_frame parapet PF windward                     55.632394 psf
+  picture_frame parapet PF leeward                     -37.088263 psf
+  penthouse parapet PHP windward                        56.288522 psf
+  penthouse parapet PHP leeward                        -37.525681 psf
+
+W_Parapet_+X
+Parapet pressures for +X wind
+  main_roof parapet TYP windward                        54.676374 psf
+  main_roof parapet TYP leeward                        -36.450916 psf
+  picture_frame parapet PF windward                     55.632394 psf
+  picture_frame parapet PF leeward                     -37.088263 psf
+  penthouse parapet PHP windward                        56.288522 psf
+  penthouse parapet PHP leeward                        -37.525681 psf
+
+W_Parapet_+Y
+Parapet pressures for +Y wind
+  main_roof parapet TYP windward                        54.676374 psf
+  main_roof parapet TYP leeward                        -36.450916 psf
+  picture_frame parapet PF windward                     55.632394 psf
+  picture_frame parapet PF leeward                     -37.088263 psf
+  penthouse parapet PHP windward                        56.288522 psf
+  penthouse parapet PHP leeward                        -37.525681 psf
+
+W_PH_-X
+PH pressures for -X wind
+  Penthouse PH1 net along-wind pressure                 40.492328 psf
+  Penthouse PH2 net along-wind pressure                 40.588834 psf
+
+W_PH_-Y
+PH pressures for -Y wind
+  Penthouse PH1 net along-wind pressure                 40.492328 psf
+  Penthouse PH2 net along-wind pressure                 40.588834 psf
+
+W_PH_+X
+PH pressures for +X wind
+  Penthouse PH1 net along-wind pressure                 40.492328 psf
+  Penthouse PH2 net along-wind pressure                 40.588834 psf
+
+W_PH_+Y
+PH pressures for +Y wind
+  Penthouse PH1 net along-wind pressure                 40.492328 psf
+  Penthouse PH2 net along-wind pressure                 40.588834 psf
+
+W_Wall_Story1_-X
+Story1 (L2): windward / leeward / sidewall Max and Min
+  Windward wall, band L2, Max                           27.600229 psf
+  Windward wall, band L2, Min                           14.690421 psf
+  Leeward wall, X wind, Max                              0.358606 psf
+  Leeward wall, X wind, Min                            -12.551202 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf
+
+W_Wall_Story2_-X
+Story2 (ROOF): windward / leeward / sidewall Max and Min
+  Windward wall, band ROOF, Max                         30.840096 psf
+  Windward wall, band ROOF, Min                         17.930288 psf
+  Leeward wall, X wind, Max                              0.358606 psf
+  Leeward wall, X wind, Min                            -12.551202 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf
+
+W_Wall_Story1_-Y
+Story1 (L2): windward / leeward / sidewall Max and Min
+  Windward wall, band L2, Max                           27.600229 psf
+  Windward wall, band L2, Min                           14.690421 psf
+  Leeward wall, Y wind, Max                             -8.785841 psf
+  Leeward wall, Y wind, Min                            -21.695649 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf
+
+W_Wall_Story2_-Y
+Story2 (ROOF): windward / leeward / sidewall Max and Min
+  Windward wall, band ROOF, Max                         30.840096 psf
+  Windward wall, band ROOF, Min                         17.930288 psf
+  Leeward wall, Y wind, Max                             -8.785841 psf
+  Leeward wall, Y wind, Min                            -21.695649 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf
+
+W_Wall_Story1_+X
+Story1 (L2): windward / leeward / sidewall Max and Min
+  Windward wall, band L2, Max                           27.600229 psf
+  Windward wall, band L2, Min                           14.690421 psf
+  Leeward wall, X wind, Max                              0.358606 psf
+  Leeward wall, X wind, Min                            -12.551202 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf
+
+W_Wall_Story2_+X
+Story2 (ROOF): windward / leeward / sidewall Max and Min
+  Windward wall, band ROOF, Max                         30.840096 psf
+  Windward wall, band ROOF, Min                         17.930288 psf
+  Leeward wall, X wind, Max                              0.358606 psf
+  Leeward wall, X wind, Min                            -12.551202 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf
+
+W_Wall_Story1_+Y
+Story1 (L2): windward / leeward / sidewall Max and Min
+  Windward wall, band L2, Max                           27.600229 psf
+  Windward wall, band L2, Min                           14.690421 psf
+  Leeward wall, Y wind, Max                             -8.785841 psf
+  Leeward wall, Y wind, Min                            -21.695649 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf
+
+W_Wall_Story2_+Y
+Story2 (ROOF): windward / leeward / sidewall Max and Min
+  Windward wall, band ROOF, Max                         30.840096 psf
+  Windward wall, band ROOF, Min                         17.930288 psf
+  Leeward wall, Y wind, Max                             -8.785841 psf
+  Leeward wall, Y wind, Min                            -21.695649 psf
+  Side wall, Max                                       -14.882139 psf
+  Side wall, Min                                       -27.791947 psf

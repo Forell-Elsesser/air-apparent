@@ -226,7 +226,15 @@ unless unlocking is explicitly enabled, because unlocking discards analysis resu
 changes already made are not rolled back.
 
 Diagnostics have `error`, `warning`, or `info` severity. Error-level plan diagnostics block apply;
-warnings such as unresolved objects or missing eccentric shears do not automatically block it.
+warnings such as objects requiring load review or missing eccentric shears do not automatically block it.
+
+Object classification is separate from load readiness. `ObjectCategory.load_issue` records
+geometry or configuration issues without replacing the physical category with `unresolved`.
+Fallback wall/parapet categories are provisional and use the configured penthouse footprints
+and main roof elevation. Unsupported sloped/non-planar shells are excluded from the supported
+horizontal loading scope and flagged for review. Objects with a load issue appear in selectable
+`AA_PREVIEW_REVIEW_<CATEGORY>` groups with empty pressure result and pattern fields; no automatic
+loads are generated for them. The UI loading column and JSON/HTML exports preserve these issues.
 Read-back verification compares the plan with stored definitions/loads and calculated resultants,
 not with ETABS analysis story forces or structural adequacy.
 

@@ -2,12 +2,12 @@
 
 Rules (documented in docs/module_interfaces.md):
 1. Explicit YAML overrides (shells, by object name) force the category.
-2. Horizontal shells are excluded; sloped or non-axis-aligned shells are unresolved.
+2. Horizontal/sloped shells are excluded from supported horizontal loading.
 3. Vertical shells on a configured penthouse footprint edge are penthouse body/parapet.
 4. Remaining vertical shells are matched to the main-building envelope (bounding rectangle of
    the dominant axis-aligned wall lines). Below the main roof plane = main wall; above =
    parapet (type matched by top elevation above grade). Inside the envelope = excluded.
-5. Shells crossing a roof plane or pressure-band boundary are unresolved with a subdivision note.
+5. Boundary crossings retain a physical category with a separate load-review issue.
 6. Frames/joints are categorized only through YAML platform/equipment mappings.
 Existing ETABS groups are never used as authority.
 """
@@ -105,8 +105,11 @@ def _envelope(cfg: Config, facts: dict[str, _Facts]) -> dict[str, float]:
         if not t:
             continue
         big = max(t.values())
-        main = sorted(c for c, v in t.items() if v >= 0.5 * big)
-        env[f"{key}_min"], env[f"{key}_max"] = main[0], main[-1]
+        # Opposite facades can have different opening ratios and mesh densities.
+        # A strict half-maximum cutoff can discard one facade entirely.
+        main = sorted(c for c, v in t.items() if v >= 0.4 * big)
+        if len(main) >= 2:
+            env[f"{key}_min"], env[f"{key}_max"] = main[0], main[-1]
     return env
 
 
@@ -151,8 +154,28 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
     def put(ref: str, cat: str, reason: str, **kw) -> None:
         out.objects[ref] = ObjectCategory(ref, cat, reason, **kw)
 
-    def unresolved(ref: str, reason: str, code: str = "unresolved_object") -> None:
-        put(ref, UNRESOLVED, reason)
+    def review_shell(ref: str, reason: str, code: str = "load_review_required") -> None:
+        # Classification and load readiness are different decisions. Retain a
+        # physical category even when inputs cannot define an automatic load.
+        f = facts[ref[2:]]
+        override = cfg.overrides.get(ref[2:])
+        ph = next((p for p in cfg.penthouses if _ph_hit(f, p) is not None
+                   and f.zmin >= p.base_model_elevation_ft - TOL), None)
+        if override and override != UNRESOLVED:
+            category = override
+            basis = "explicit override"
+        elif not f.vertical:
+            category = EXCLUDED
+            basis = "sloped/non-planar shell outside supported horizontal loading"
+        elif ph:
+            category = (PENTHOUSE_PARAPET if f.zmin >= ph.base_model_elevation_ft + ph.body_height_ft - TOL
+                        else PENTHOUSE_BODY)
+            basis = f"on configured penthouse {ph.id} footprint"
+        else:
+            category = MAIN_PARAPET if f.zmin >= main_roof - TOL else MAIN_WALL
+            basis = "provisional geometry classification relative to configured main roof"
+        put(ref, category, f"{basis}; {reason}", load_issue=reason,
+            component=ph.id if ph else "", overridden=bool(override))
         diags.append(Diagnostic("warning", code, reason, ref))
 
     for s in snap.shells:
@@ -161,13 +184,16 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
         override = cfg.overrides.get(s.name)
         if not f.vertical:
             if len({round(c[2], 3) for c in s.corners}) == 1:
-                put(ref, override or EXCLUDED, "horizontal shell; no horizontal MWFRS load in MVP",
-                    overridden=bool(override))
+                if override and override != EXCLUDED:
+                    review_shell(ref, "horizontal shell; override has no supported horizontal load treatment")
+                else:
+                    put(ref, EXCLUDED, "horizontal shell; no horizontal MWFRS load in MVP",
+                        overridden=bool(override))
             else:
-                unresolved(ref, "sloped or non-planar shell; unsupported geometry")
+                review_shell(ref, "sloped or non-planar shell; unsupported geometry")
             continue
         if not f.axis:
-            unresolved(ref, "vertical shell not parallel to global X or Y; unsupported layout",
+            review_shell(ref, "vertical shell not parallel to global X or Y; unsupported layout",
                        "unsupported_layout")
             continue
         # Penthouse?
@@ -187,7 +213,7 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
                 ptype = _match_parapet(parapet_types, f.zmax - grade, "penthouse")
                 reason = f"on footprint edge of {ph.id}, above body top {body_top:g}"
             elif f.zmax > body_top + TOL:
-                unresolved(ref, f"shell crosses top of penthouse {ph.id} body (z={body_top:g}); "
+                review_shell(ref, f"shell crosses top of penthouse {ph.id} body (z={body_top:g}); "
                                 "subdivide at the penthouse roof", "needs_subdivision")
                 continue
             else:
@@ -207,7 +233,7 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
                 elif category:
                     pass
                 else:
-                    unresolved(ref, "outside the main-building envelope (stray object or unsupported "
+                    review_shell(ref, "outside the main-building envelope (stray object or unsupported "
                                     "layout); classify with an override", "unsupported_layout")
                     continue
             if n_out is not None and category not in (STAIR_PROJECTION,):
@@ -218,11 +244,11 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
                     in_band = [b for b in cfg.story_bands if f.zmin >= b.bottom_model_elevation_ft - TOL
                                and f.zmax <= b.top_model_elevation_ft + TOL]
                     if bad:
-                        unresolved(ref, f"shell crosses pressure-band boundary at z={bad[0]:g}; "
+                        review_shell(ref, f"shell crosses pressure-band boundary at z={bad[0]:g}; "
                                         "subdivide the shell there", "needs_subdivision")
                         continue
                     if not in_band:
-                        unresolved(ref, "shell lies outside all configured story bands")
+                        review_shell(ref, "shell lies outside all configured story bands")
                         continue
                     band = in_band[0].id
                     category = category or MAIN_WALL
@@ -230,7 +256,7 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
                 elif f.zmin >= main_roof - TOL:
                     ptype = _match_parapet(parapet_types, f.zmax - grade, "main")
                     if not ptype:
-                        unresolved(ref, f"parapet top {f.zmax - grade:g} ft above grade matches no "
+                        review_shell(ref, f"parapet top {f.zmax - grade:g} ft above grade matches no "
                                         "configured parapet type")
                         continue
                     kind = parapet_types[ptype].kind
@@ -238,20 +264,20 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
                                             else MAIN_PARAPET)
                     reason = f"parapet type {ptype} on main envelope above roof plane"
                 else:
-                    unresolved(ref, f"shell crosses main roof plane (z={main_roof:g}); "
+                    review_shell(ref, f"shell crosses main roof plane (z={main_roof:g}); "
                                     "subdivide at the roof plane", "needs_subdivision")
                     continue
         if category in (PENTHOUSE_PARAPET, MAIN_PARAPET, PICTURE_FRAME_PARAPET) and not ptype:
-            unresolved(ref, "parapet top elevation matches no configured parapet type of this kind")
+            review_shell(ref, "parapet top elevation matches no configured parapet type of this kind")
             continue
         if category in (PENTHOUSE_BODY, PENTHOUSE_PARAPET) and not comp:
-            unresolved(ref, f"override {category} requires location on a penthouse footprint edge")
+            review_shell(ref, f"override {category} requires location on a penthouse footprint edge")
             continue
-        if category is None or category not in CATEGORIES:
-            unresolved(ref, "no rule matched")
+        if category is None or category not in CATEGORIES or category == UNRESOLVED:
+            review_shell(ref, "no rule matched")
             continue
         if category not in (EXCLUDED, UNRESOLVED) and n_out is None:
-            unresolved(ref, f"override {category} could not determine the outward face normal")
+            review_shell(ref, f"override {category} could not determine the outward face normal")
             continue
         if category == STAIR_PROJECTION:
             diags.append(Diagnostic("warning", "stair_projection_no_treatment",
@@ -260,7 +286,7 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C90
         # local axis 3 must be normal to the shell
         if n_out is not None and abs(sum(a * b for a, b in zip(s.local3, n_out, strict=True))) < 0.99 \
                 and category not in (EXCLUDED, UNRESOLVED):
-            unresolved(ref, "local axis 3 is not normal to the shell face; check local axes")
+            review_shell(ref, "local axis 3 is not normal to the shell face; check local axes")
             continue
         put(ref, category, reason or "explicit override", band=band, component=comp,
             parapet_type=ptype, outward_normal=n_out, overridden=bool(override))
@@ -345,6 +371,7 @@ def _dimensions(cfg, snap, facts, out: Categorization, env, have_env: bool) -> N
                       and abs(f.zmin - zlow) <= TOL)
         if covered < EDGE_COVERAGE_MIN * span:
             out.diagnostics.append(Diagnostic(
-                "error", "unsupported_layout",
+                "warning", "incomplete_envelope_coverage",
                 f"envelope edge {key}={env[key]:g} is only {covered / span:.0%} covered by wall "
-                "shells at the lowest level; layout is not a single rectangular building"))
+                "shells at the lowest level; check openings, missing cladding and the rectangular "
+                "envelope assumption. Loads cover modeled, load-ready shells only."))

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import math
+from copy import deepcopy
 from dataclasses import dataclass, field
 
 from .categorization import PREFIX, categorize, reconcile_membership
-from .config import effective_config_yaml, load_config
+from .config import effective_config_yaml, load_config, validate_config
 from .demo import build_demo_snapshot
 from .etabs import AdapterError, EtabsAdapter, FakeAdapter
 from .models import (
@@ -79,6 +80,16 @@ class WindSession:
         self._need_cfg()
         self.adapter = FakeAdapter(build_demo_snapshot(self.cfg))
         self._invalidate(from_model=True)
+
+    def set_loading_scope(self, scope: str) -> None:
+        """Change active scope and invalidate dependent plans, previews and exports."""
+        self._need_cfg()
+        data = deepcopy(self.cfg.raw)
+        data["loading"]["scope"] = scope
+        cfg = validate_config(data, source_path=self.cfg.source_path)
+        self.cfg = cfg
+        self.config_hash = hashlib.sha256(effective_config_yaml(cfg).encode()).hexdigest()[:12]
+        self._invalidate()
 
     def connect(self, adapter: EtabsAdapter) -> None:
         self.adapter = adapter
@@ -198,6 +209,10 @@ class WindSession:
         if conflicts:
             return ApplyResult(False, "name conflicts with unrelated model content", diagnostics=conflicts)
         notes = []
+        recovered_cases = self._recoverable_cases(manifest)
+        for name in sorted(recovered_cases):
+            notes.append(Diagnostic("info", "matching_case_reused",
+                                    f"reusing matching case {name!r} referencing tool-owned patterns", name))
         if a.info().locked:
             if not allow_unlock:
                 return ApplyResult(False, "model is locked; unlocking discards analysis results. "
@@ -222,7 +237,8 @@ class WindSession:
                 counts["assignments"] += 1
             new_manifest["assignments"] = sorted([k, r, p] for k, r, p in wanted)
             for c in self.plan.cases:
-                a.define_case(c)
+                if c.name not in recovered_cases:
+                    a.define_case(c)
                 new_manifest["cases"].append(c.name)
                 counts["cases"] += 1
             for kind in ("linear", "envelope"):
@@ -240,6 +256,7 @@ class WindSession:
     def _name_conflicts(self, manifest: dict) -> list[Diagnostic]:
         a = self.adapter
         out = []
+        recovered_cases = self._recoverable_cases(manifest)
         for label, existing, planned, owned in (
             ("pattern", set(a.read_patterns()), {p.name for p in self.plan.patterns},
              set(manifest.get("patterns", []))),
@@ -249,9 +266,22 @@ class WindSession:
              set(manifest.get("combinations", []))),
         ):
             for n in sorted((existing & planned) - owned):
+                if label == "case" and n in recovered_cases:
+                    continue
                 out.append(Diagnostic("error", "name_conflict",
                                       f"{label} {n!r} already exists and is not tool-owned", n))
         return out
+
+    def _recoverable_cases(self, manifest: dict) -> set[str]:
+        """Reuse exact component cases left by an interrupted apply without overwriting them."""
+        owned_patterns = set(manifest.get("patterns", []))
+        if not owned_patterns:
+            return set()
+        existing = self.adapter.read_cases()
+        owned_cases = set(manifest.get("cases", []))
+        return {c.name for c in self.plan.cases
+                if c.name.startswith("AA_") and c.name not in owned_cases and c.terms
+                and all(p in owned_patterns for p, _ in c.terms) and existing.get(c.name) == c.terms}
 
     # ------------------------------------------------------------------ step 8
     def verify(self) -> list[VerifyRow]:

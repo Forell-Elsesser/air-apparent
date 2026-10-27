@@ -1,0 +1,1610 @@
+{
+  "input_file": "examples\\reference_sample.yaml",
+  "pressure_set": {
+    "edition": "ASCE 7-10",
+    "dims": {
+      "X": {
+        "parallel_l": 1472.0,
+        "perpendicular_b": 240.0
+      },
+      "Y": {
+        "parallel_l": 240.0,
+        "perpendicular_b": 1472.0
+      }
+    },
+    "results": {
+      "W_Parapet_-X": {
+        "id": "W_Parapet_-X",
+        "description": "Parapet pressures for -X wind",
+        "direction": "-X",
+        "components": [
+          {
+            "id": "PARAPET_TYP_WW",
+            "description": "main_roof parapet TYP windward",
+            "value": 54.67637439976765,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_TYP_LW",
+            "description": "main_roof parapet TYP leeward",
+            "value": -36.45091626651177,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_WW",
+            "description": "picture_frame parapet PF windward",
+            "value": 55.632394081518235,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_LW",
+            "description": "picture_frame parapet PF leeward",
+            "value": -37.08826272101216,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_WW",
+            "description": "penthouse parapet PHP windward",
+            "value": 56.288522095417484,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_LW",
+            "description": "penthouse parapet PHP leeward",
+            "value": -37.52568139694499,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_Parapet_-Y": {
+        "id": "W_Parapet_-Y",
+        "description": "Parapet pressures for -Y wind",
+        "direction": "-Y",
+        "components": [
+          {
+            "id": "PARAPET_TYP_WW",
+            "description": "main_roof parapet TYP windward",
+            "value": 54.67637439976765,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_TYP_LW",
+            "description": "main_roof parapet TYP leeward",
+            "value": -36.45091626651177,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_WW",
+            "description": "picture_frame parapet PF windward",
+            "value": 55.632394081518235,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_LW",
+            "description": "picture_frame parapet PF leeward",
+            "value": -37.08826272101216,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_WW",
+            "description": "penthouse parapet PHP windward",
+            "value": 56.288522095417484,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_LW",
+            "description": "penthouse parapet PHP leeward",
+            "value": -37.52568139694499,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_Parapet_+X": {
+        "id": "W_Parapet_+X",
+        "description": "Parapet pressures for +X wind",
+        "direction": "+X",
+        "components": [
+          {
+            "id": "PARAPET_TYP_WW",
+            "description": "main_roof parapet TYP windward",
+            "value": 54.67637439976765,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_TYP_LW",
+            "description": "main_roof parapet TYP leeward",
+            "value": -36.45091626651177,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_WW",
+            "description": "picture_frame parapet PF windward",
+            "value": 55.632394081518235,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_LW",
+            "description": "picture_frame parapet PF leeward",
+            "value": -37.08826272101216,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_WW",
+            "description": "penthouse parapet PHP windward",
+            "value": 56.288522095417484,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_LW",
+            "description": "penthouse parapet PHP leeward",
+            "value": -37.52568139694499,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_Parapet_+Y": {
+        "id": "W_Parapet_+Y",
+        "description": "Parapet pressures for +Y wind",
+        "direction": "+Y",
+        "components": [
+          {
+            "id": "PARAPET_TYP_WW",
+            "description": "main_roof parapet TYP windward",
+            "value": 54.67637439976765,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_TYP_LW",
+            "description": "main_roof parapet TYP leeward",
+            "value": -36.45091626651177,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 36.45091626651177,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 67.0,
+              "height_above_roof_ft": 5.0
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_WW",
+            "description": "picture_frame parapet PF windward",
+            "value": 55.632394081518235,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PF_LW",
+            "description": "picture_frame parapet PF leeward",
+            "value": -37.08826272101216,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.08826272101216,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 72.75,
+              "height_above_roof_ft": 10.75
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_WW",
+            "description": "penthouse parapet PHP windward",
+            "value": 56.288522095417484,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": 1.5,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PARAPET_PHP_LW",
+            "description": "penthouse parapet PHP leeward",
+            "value": -37.52568139694499,
+            "units": "psf",
+            "reference": "Section 27.4.5",
+            "inputs": {
+              "qp_psf": 37.52568139694499,
+              "GCpn": -1.0,
+              "top_elevation_above_grade_ft": 76.9166666667,
+              "height_above_roof_ft": 0.5
+            },
+            "source_cell": "",
+            "notes": "loaded area = parapet shell area; top elevation is above grade",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_PH_-X": {
+        "id": "W_PH_-X",
+        "description": "PH pressures for -X wind",
+        "direction": "-X",
+        "components": [
+          {
+            "id": "PH_PH1_NET",
+            "description": "Penthouse PH1 net along-wind pressure",
+            "value": 40.492328464475314,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 68.7083333333,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 25.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PH_PH2_NET",
+            "description": "Penthouse PH2 net along-wind pressure",
+            "value": 40.58883384949544,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 69.4896416531,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 13.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_PH_-Y": {
+        "id": "W_PH_-Y",
+        "description": "PH pressures for -Y wind",
+        "direction": "-Y",
+        "components": [
+          {
+            "id": "PH_PH1_NET",
+            "description": "Penthouse PH1 net along-wind pressure",
+            "value": 40.492328464475314,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 68.7083333333,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 25.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PH_PH2_NET",
+            "description": "Penthouse PH2 net along-wind pressure",
+            "value": 40.58883384949544,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 69.4896416531,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 13.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_PH_+X": {
+        "id": "W_PH_+X",
+        "description": "PH pressures for +X wind",
+        "direction": "+X",
+        "components": [
+          {
+            "id": "PH_PH1_NET",
+            "description": "Penthouse PH1 net along-wind pressure",
+            "value": 40.492328464475314,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 68.7083333333,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 25.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PH_PH2_NET",
+            "description": "Penthouse PH2 net along-wind pressure",
+            "value": 40.58883384949544,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 69.4896416531,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 13.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_PH_+Y": {
+        "id": "W_PH_+Y",
+        "description": "PH pressures for +Y wind",
+        "direction": "+Y",
+        "components": [
+          {
+            "id": "PH_PH1_NET",
+            "description": "Penthouse PH1 net along-wind pressure",
+            "value": 40.492328464475314,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 68.7083333333,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 25.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "PH_PH2_NET",
+            "description": "Penthouse PH2 net along-wind pressure",
+            "value": 40.58883384949544,
+            "units": "psf",
+            "reference": "Section 29.5 / Fig. 29.5-1 (unverified)",
+            "inputs": {
+              "z_ft": 69.4896416531,
+              "G": 0.85,
+              "Cf": 1.3,
+              "min_plan_dimension_ft": 13.0,
+              "body_height_ft": 15.4166666667
+            },
+            "source_cell": "",
+            "notes": "p = qz*G*Cf, Cf from YAML; reproduces workbook; applicability of 29.5 unverified",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": ""
+      },
+      "W_Wall_Story1_-X": {
+        "id": "W_Wall_Story1_-X",
+        "description": "Story1 (L2): windward / leeward / sidewall Max and Min",
+        "direction": "-X",
+        "components": [
+          {
+            "id": "WALL_WW_L2_MAX",
+            "description": "Windward wall, band L2, Max",
+            "value": 27.600228686312335,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_L2_MIN",
+            "description": "Windward wall, band L2, Min",
+            "value": 14.690421120829138,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MAX",
+            "description": "Leeward wall, X wind, Max",
+            "value": 0.35860576570786584,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MIN",
+            "description": "Leeward wall, X wind, Min",
+            "value": -12.55120179977533,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "L2"
+      },
+      "W_Wall_Story2_-X": {
+        "id": "W_Wall_Story2_-X",
+        "description": "Story2 (ROOF): windward / leeward / sidewall Max and Min",
+        "direction": "-X",
+        "components": [
+          {
+            "id": "WALL_WW_ROOF_MAX",
+            "description": "Windward wall, band ROOF, Max",
+            "value": 30.840095850876523,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_ROOF_MIN",
+            "description": "Windward wall, band ROOF, Min",
+            "value": 17.93028828539333,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MAX",
+            "description": "Leeward wall, X wind, Max",
+            "value": 0.35860576570786584,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MIN",
+            "description": "Leeward wall, X wind, Min",
+            "value": -12.55120179977533,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "ROOF"
+      },
+      "W_Wall_Story1_-Y": {
+        "id": "W_Wall_Story1_-Y",
+        "description": "Story1 (L2): windward / leeward / sidewall Max and Min",
+        "direction": "-Y",
+        "components": [
+          {
+            "id": "WALL_WW_L2_MAX",
+            "description": "Windward wall, band L2, Max",
+            "value": 27.600228686312335,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_L2_MIN",
+            "description": "Windward wall, band L2, Min",
+            "value": 14.690421120829138,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MAX",
+            "description": "Leeward wall, Y wind, Max",
+            "value": -8.78584125984273,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MIN",
+            "description": "Leeward wall, Y wind, Min",
+            "value": -21.695648825325925,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "L2"
+      },
+      "W_Wall_Story2_-Y": {
+        "id": "W_Wall_Story2_-Y",
+        "description": "Story2 (ROOF): windward / leeward / sidewall Max and Min",
+        "direction": "-Y",
+        "components": [
+          {
+            "id": "WALL_WW_ROOF_MAX",
+            "description": "Windward wall, band ROOF, Max",
+            "value": 30.840095850876523,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_ROOF_MIN",
+            "description": "Windward wall, band ROOF, Min",
+            "value": 17.93028828539333,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MAX",
+            "description": "Leeward wall, Y wind, Max",
+            "value": -8.78584125984273,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MIN",
+            "description": "Leeward wall, Y wind, Min",
+            "value": -21.695648825325925,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "ROOF"
+      },
+      "W_Wall_Story1_+X": {
+        "id": "W_Wall_Story1_+X",
+        "description": "Story1 (L2): windward / leeward / sidewall Max and Min",
+        "direction": "+X",
+        "components": [
+          {
+            "id": "WALL_WW_L2_MAX",
+            "description": "Windward wall, band L2, Max",
+            "value": 27.600228686312335,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_L2_MIN",
+            "description": "Windward wall, band L2, Min",
+            "value": 14.690421120829138,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MAX",
+            "description": "Leeward wall, X wind, Max",
+            "value": 0.35860576570786584,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MIN",
+            "description": "Leeward wall, X wind, Min",
+            "value": -12.55120179977533,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "L2"
+      },
+      "W_Wall_Story2_+X": {
+        "id": "W_Wall_Story2_+X",
+        "description": "Story2 (ROOF): windward / leeward / sidewall Max and Min",
+        "direction": "+X",
+        "components": [
+          {
+            "id": "WALL_WW_ROOF_MAX",
+            "description": "Windward wall, band ROOF, Max",
+            "value": 30.840095850876523,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_ROOF_MIN",
+            "description": "Windward wall, band ROOF, Min",
+            "value": 17.93028828539333,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MAX",
+            "description": "Leeward wall, X wind, Max",
+            "value": 0.35860576570786584,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_X_MIN",
+            "description": "Leeward wall, X wind, Min",
+            "value": -12.55120179977533,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.2,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 6.133333333333334
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "ROOF"
+      },
+      "W_Wall_Story1_+Y": {
+        "id": "W_Wall_Story1_+Y",
+        "description": "Story1 (L2): windward / leeward / sidewall Max and Min",
+        "direction": "+Y",
+        "components": [
+          {
+            "id": "WALL_WW_L2_MAX",
+            "description": "Windward wall, band L2, Max",
+            "value": 27.600228686312335,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_L2_MIN",
+            "description": "Windward wall, band L2, Min",
+            "value": 14.690421120829138,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 31.096066034662844,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 31.5
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MAX",
+            "description": "Leeward wall, Y wind, Max",
+            "value": -8.78584125984273,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MIN",
+            "description": "Leeward wall, Y wind, Min",
+            "value": -21.695648825325925,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "L2"
+      },
+      "W_Wall_Story2_+Y": {
+        "id": "W_Wall_Story2_+Y",
+        "description": "Story2 (ROOF): windward / leeward / sidewall Max and Min",
+        "direction": "+Y",
+        "components": [
+          {
+            "id": "WALL_WW_ROOF_MAX",
+            "description": "Windward wall, band ROOF, Max",
+            "value": 30.840095850876523,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_WW_ROOF_MIN",
+            "description": "Windward wall, band ROOF, Min",
+            "value": 17.93028828539333,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": 0.8,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "z_ft": 62.0
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MAX",
+            "description": "Leeward wall, Y wind, Max",
+            "value": -8.78584125984273,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_LW_Y_MIN",
+            "description": "Leeward wall, Y wind, Min",
+            "value": -21.695648825325925,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.5,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi",
+              "L/B": 0.16304347826086957
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MAX",
+            "description": "Side wall, Max",
+            "value": -14.88213927687646,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": -0.18,
+              "branch": "Max",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          },
+          {
+            "id": "WALL_SIDE_MIN",
+            "description": "Side wall, Min",
+            "value": -27.791946842359657,
+            "units": "psf",
+            "reference": "Fig. 27.4-1",
+            "inputs": {
+              "q_psf": 35.860576570786655,
+              "G": 0.85,
+              "Cp": -0.7,
+              "qi_psf": 35.860576570786655,
+              "GCpi_signed": 0.18,
+              "branch": "Min",
+              "equation": "p = q*G*Cp - qi*GCpi"
+            },
+            "source_cell": "",
+            "notes": "positive = pressure toward the surface; branch label is not the code minimum load",
+            "status": "workbook_reproduction"
+          }
+        ],
+        "story_band": "ROOF"
+      }
+    }
+  }
+}

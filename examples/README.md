@@ -7,6 +7,29 @@ These files illustrate the wind-load calculation and assignment workflow:
 | [Data Center Wind Loading (ASCE 7-10).xlsx](<Data Center Wind Loading (ASCE 7-10).xlsx>) | Sample calculation workbook for the ASCE 7-10 wind-loading process. |
 | [Test Model.EDB](<Test Model.EDB>) | Sample ETABS model illustrating load assignments and treatment of the process. |
 | [reference_sample.yaml](reference_sample.yaml) | Runnable inputs for the application's offline benchmark and synthetic demo geometry. |
+| [walls_parapets_only.yaml](walls_parapets_only.yaml) | Wall/parapet component scope; omits equipment, penthouse net forces, torsion, and W1-W4 combinations. |
+
+`reference_sample.yaml` now also selects `loading.scope: walls_parapets` for the current workflow.
+The GUI shows the active Load scope; changing it invalidates the plan and preview groups.
+Changes made in the scope selector apply to the current session; YAML reloads use the file's scope.
+Click Calculate to open Pressure results automatically. The table shows calculated values,
+units and references; select a row to inspect calculation inputs, status and the substituted
+wall-pressure equation. The table shows windward, leeward and side-wall Max/Min pressures,
+parapet pressures and penthouse net pressures. Export report also writes this selection to
+`pressure_results.txt` and `pressure_results.json`. Supporting calculations remain internal;
+the load scope controls which families are included in the ETABS assignment plan.
+Output IDs are grouped by wind direction: `W_Parapet_±X/±Y`, `W_PH_±X/±Y`, and
+`W_Wall_Story<N>_±X/±Y`. Stories are numbered by increasing pressure-band evaluation height
+(the sample maps Story1 to L2 and Story2 to ROOF). Expand a result in the GUI to see numeric
+component pressures. Wall groups retain windward, axis-specific leeward and side-wall Max/Min
+values; parapet and penthouse groups retain each configured type/component. These output IDs
+group pressures and do not rename existing ETABS definitions or internal calculation IDs.
+
+For wall/parapet-only application, load `reference_sample.yaml` or `walls_parapets_only.yaml`, reconnect, click Inspect,
+Calculate, and Create/Update preview groups, then Review & apply. This scope creates eight
+`AA_W_Wall_*` / `AA_W_Parapet_*` component patterns and cases to preserve existing `W_*` content.
+The file inherits the benchmark wind inputs and elevations; changing scope does not validate
+those inputs for a project. Objects marked Review required still receive no automatic load.
 
 The workbook supplies calculation context; the EDB supplies a model-based example of
 how the loads are assigned. Inclusion of the model does not establish that the

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from ..categorization import detect_group_conflicts
 from ..models import (
     DIR_VECTORS,
@@ -67,6 +69,8 @@ def build_assignments(cfg: Config, snap: ModelSnapshot, cats: Categorization,
     out: list[Assignment] = []
     diags: list[Diagnostic] = []
     for g in cats.groups:
+        if cfg.loading.scope == "walls_parapets" and not g.pattern.startswith(("W_Wall_", "W_Parapet_")):
+            continue
         if not g.pattern or not g.result_id or "|" in g.pattern:
             continue
         if g.result_id not in ps.results:
@@ -84,10 +88,16 @@ def build_assignments(cfg: Config, snap: ModelSnapshot, cats: Categorization,
                 sign=g.assignment_sign, direction=g.direction,
                 note="code pressure positive toward surface; sign converts to local axis 3"))
     present = set(cats.objects)
+    if cfg.loading.scope == "walls_parapets":
+        return out, diags
     mech = mech_assignments(cfg, ps, "+X", present) + mech_assignments(cfg, ps, "+Y", present)
     out += mech
     diags += verify_mech_reversibility(cfg, ps)
     for eq in cfg.equipment:
+        if not any(f"P:{j}" in present for j in eq.support_joints):
+            diags.append(Diagnostic("warning", "equipment_not_in_model",
+                                    f"{eq.id}: no configured support joints exist; equipment receives no load"))
+            continue
         total = sum(a.value for a in mech if a.object_ref in {f"P:{j}" for j in eq.support_joints}
                     and a.pattern.endswith("X"))
         if abs(total - ps.value(f"EQ_{eq.id}_FX")) > 1e-9:
@@ -136,14 +146,40 @@ def build_plan(cfg: Config, snap: ModelSnapshot, cats: Categorization, ps: Press
 
     assignments, diags = build_assignments(cfg, snap, cats, ps)
     diags = list(cats.diagnostics) + detect_group_conflicts(cats.groups) + diags
+    review = [o for o in cats.objects.values() if o.load_issue]
+    if review:
+        diags.append(Diagnostic("warning", "load_review_required",
+                                f"{len(review)} classified object(s) need load review and receive no automatic load; "
+                                "see AA_PREVIEW_REVIEW_* groups"))
     unresolved = [o for o in cats.objects.values() if o.category == "unresolved"]
     if unresolved:
         diags.append(Diagnostic("warning", "unresolved_objects",
                                 f"{len(unresolved)} unresolved object(s) receive no load; see "
                                 "AA_PREVIEW_UNRESOLVED"))
+    patterns, cases, combinations = pattern_specs(), case_specs(), build_combinations()
+    groups = list(cats.groups)
+    if cfg.loading.scope == "walls_parapets":
+        patterns = [p for p in patterns if p.family in ("Wall", "Parapet")]
+        pattern_names = {p.name for p in patterns}
+        cases = [c for c in cases if all(p in pattern_names for p, _ in c.terms)]
+        # W1-W4 include other families/torsion. Do not publish reduced versions under their names.
+        combinations = []
+        groups = [g for g in groups if not g.pattern or g.pattern in pattern_names]
+        # The live model may already contain manually authored W_Wall/W_Parapet definitions.
+        # Use separate component names instead of taking ownership of those existing loads.
+        rename = {p.name: "AA_" + p.name for p in patterns}
+        patterns = [replace(p, name=rename[p.name]) for p in patterns]
+        cases = [replace(c, name="AA_" + c.name,
+                         terms=tuple((rename[p], f) for p, f in c.terms)) for c in cases]
+        assignments = [replace(a, id=rename[a.pattern] + "|" + a.object_ref,
+                               pattern=rename[a.pattern]) for a in assignments]
+        groups = [replace(g, pattern=rename.get(g.pattern, g.pattern)) for g in groups]
+        diags.append(Diagnostic("info", "loading_scope",
+                                "Wall/parapet component loads only; equipment, penthouse net forces, "
+                                "torsion and W1-W4 combinations are omitted."))
     plan = LoadPlan(
-        patterns=pattern_specs(), cases=case_specs(), assignments=assignments,
-        combinations=build_combinations(), groups=list(cats.groups), diagnostics=diags,
+        patterns=patterns, cases=cases, assignments=assignments,
+        combinations=combinations, groups=groups, diagnostics=diags,
         notes=["Horizontal MWFRS only: roof uplift and C&C design are out of scope.",
                "W_Ecc and W1-W4 definitions are provisional (not yet engineering-reviewed).",
                "Equipment overturning moments are not included."])

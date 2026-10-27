@@ -209,7 +209,7 @@ def validate_config(data: Any, source_path: str = "") -> Config:  # noqa: C901
     # loading
     ld = c.mapping(d.get("loading"), "loading",
                    ("wall_pressure_branch_by_direction", "eccentricity_ratio", "mechanical_patterns"),
-                   ("story_shears_kip",))
+                   ("story_shears_kip", "scope"))
     branches = ld.get("wall_pressure_branch_by_direction", {})
     if not isinstance(branches, dict):
         c.err("loading.wall_pressure_branch_by_direction", "must be a mapping")
@@ -243,7 +243,8 @@ def validate_config(data: Any, source_path: str = "") -> Config:  # noqa: C901
                     c.err(f"{p}.{sn}", f"must be a non-negative number, got {val!r}")
                 else:
                     shears[dk][str(sn)] = float(val)
-    loading = LoadingConfig(dict(branches), ecc, mech or "", shears)
+    scope = c.choice(ld, "scope", "loading", ("all", "walls_parapets"), default="all")
+    loading = LoadingConfig(dict(branches), ecc, mech or "", shears, scope)
 
     # grade / roof planes
     gr = c.mapping(d.get("grade"), "grade", ("datum_model_elevation_ft", "roof_planes"))

@@ -63,6 +63,12 @@ def build_group_specs(cfg: Config, snap: ModelSnapshot, cats: Categorization) ->
         b["members"].append(ref)
 
     for ref, oc in cats.objects.items():
+        if oc.load_issue:
+            # Category groups remain selectable without inventing pressure inputs.
+            add(preview_group_name("REVIEW", oc.category.upper()), ref, category=oc.category,
+                band="", direction="", role="REVIEW", component=oc.component, sign=1,
+                result_id="", pattern="")
+            continue
         if oc.category in (MAIN_WALL, MAIN_PARAPET, PICTURE_FRAME_PARAPET, PENTHOUSE_BODY,
                            PENTHOUSE_PARAPET):
             s = shells[ref]

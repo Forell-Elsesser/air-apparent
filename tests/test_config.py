@@ -16,6 +16,7 @@ def test_reference_and_template_load():
     for f in WORKBOOK_FIELDS:
         assert f in ref.raw["wind"]
     assert ref.geometry.plan_dimensions_source == "yaml"
+    assert ref.loading.scope == "walls_parapets"
     assert ref.geometry.x_wind.parallel_l == ref.geometry.y_wind.perpendicular_b == 1472.0
     assert ref.geometry.x_wind.perpendicular_b == ref.geometry.y_wind.parallel_l == 240.0
     assert ref.loading.wall_pressure_branch_by_direction == {

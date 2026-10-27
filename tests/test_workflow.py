@@ -145,10 +145,105 @@ def test_exports(session, tmp_path):
     session.verify()
     files = export_all(session, tmp_path)
     assert {f.name for f in files} == {"effective_config.yaml", "assignment_plan.json",
-                                       "assignment_plan.csv", "report.html"}
+                                       "assignment_plan.csv", "report.html",
+                                       "pressure_results.txt", "pressure_results.json"}
     data = json.loads((tmp_path / "assignment_plan.json").read_text())
     assert len(data["assignments"]) == len(session.plan.assignments)
     html = (tmp_path / "report.html").read_text()
     assert "Live ETABS verification" in html and "provisional" in html.lower()
     assert "WALL_WW_L2_MIN" in html
+
+
+def test_walls_parapets_only_applies_without_equipment_or_torsion_targets(session):
+    from dataclasses import replace
+
+    session.cfg = replace(session.cfg, loading=replace(session.cfg.loading, scope="walls_parapets"))
+    session.snapshot.joints.clear()
+    session.snapshot.frames.clear()
+    session.snapshot.stories.clear()
+    session.categorize()
+    plan = session.build_plan()
+    assert len(plan.patterns) == len(plan.cases) == 8
+    assert not plan.combinations
+    assert plan.assignments and all(a.pattern.startswith(("AA_W_Wall_", "AA_W_Parapet_"))
+                                    for a in plan.assignments)
+    session.adapter.extra_patterns.extend(["W_Wall_+X", "W_Parapet_+X"])
+    assert not any(d.level == "error" for d in plan.diagnostics)
+    session.create_preview_groups()
+    result = session.apply()
+    assert result.ok, result
+    assert result.applied["combinations"] == 0
+    assert all(r.ok for r in session.verify())
+
+
+def test_wall_scope_config_roundtrips():
+    from air_apparent.config import effective_config_yaml, load_config, parse_config
+
+    cfg = load_config(REFERENCE.with_name("walls_parapets_only.yaml"))
+    assert cfg.loading.scope == "walls_parapets"
+    assert parse_config(effective_config_yaml(cfg)).loading.scope == "walls_parapets"
+
+
+def test_changing_scope_clears_torsion_errors_and_invalidates_previews(session):
+    from air_apparent.config import effective_config_yaml, parse_config
+
+    session.snapshot.stories.clear()
+    session.build_plan()
+    assert any(d.code == "ecc_no_reference_joint" for d in session.plan.diagnostics)
+    session.create_preview_groups()
+    previous_hash = session.config_hash
+    session.set_loading_scope("walls_parapets")
+    assert session.plan is None and not session.preview_valid
+    assert session.config_hash != previous_hash
+    assert parse_config(effective_config_yaml(session.cfg)).loading.scope == "walls_parapets"
+    plan = session.build_plan()
+    assert not any(d.level == "error" for d in plan.diagnostics)
+    assert len(plan.patterns) == 8 and not plan.combinations
+    session.create_preview_groups()
+    assert session.apply().ok
+
+
+def test_reference_sample_applies_wall_scope_without_torsion_targets():
+    s = WindSession()
+    s.load_config(str(REFERENCE))
+    s.use_offline_demo()
+    s.read_model()
+    s.snapshot.stories.clear()
+    s.build_plan()
+    s.create_preview_groups()
+    result = s.apply()
+    assert result.ok, result
+    assert not any(p.family == "Ecc" for p in s.plan.patterns)
+
+
+def test_retry_reuses_exact_case_left_by_interrupted_scoped_apply(session):
+    session.set_loading_scope("walls_parapets")
+    session.build_plan()
+    session.create_preview_groups()
+    case = session.plan.cases[0]
+    session.adapter.fail_on = "define_case:" + case.name
+    assert session.apply().partial
+    # Simulate ETABS completing SetLoads before the old client misread its success response.
+    session.adapter.cases[case.name] = case
+    session.adapter.fail_on = ""
+    before = len(session.adapter.calls)
+    result = session.apply()
+    assert result.ok, result
+    assert "define_case:" + case.name not in session.adapter.calls[before:]
+    assert any(d.code == "matching_case_reused" for d in result.diagnostics)
+    assert case.name in session.adapter.read_manifest()["cases"]
+
+
+def test_retry_does_not_reuse_mismatched_case(session):
+    from dataclasses import replace
+
+    session.set_loading_scope("walls_parapets")
+    session.build_plan()
+    session.create_preview_groups()
+    case = session.plan.cases[0]
+    session.adapter.fail_on = "define_case:" + case.name
+    session.apply()
+    session.adapter.fail_on = ""
+    session.adapter.cases[case.name] = replace(case, terms=((case.terms[0][0], 2.0),))
+    assert any(d.code == "name_conflict" for d in session.apply().diagnostics)
 

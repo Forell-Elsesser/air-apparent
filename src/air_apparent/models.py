@@ -74,6 +74,7 @@ class LoadingConfig:
     eccentricity_ratio: float
     mechanical_patterns: str
     story_shears_kip: dict[str, dict[str, float]] = field(default_factory=dict)
+    scope: str = "all"  # all | walls_parapets
 
 
 @dataclass(frozen=True)
@@ -269,6 +270,7 @@ class ObjectCategory:
     parapet_type: str = ""  # parapet type id for parapet categories
     outward_normal: tuple[float, float, float] | None = None
     overridden: bool = False
+    load_issue: str = ""  # category is known/inferred, but automatic loading needs review
 
 
 @dataclass(frozen=True)
