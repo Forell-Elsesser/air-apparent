@@ -1,0 +1,32 @@
+{
+  "description": "Reference workbook values (workbook reproduction, NOT independent code validation).",
+  "tolerance_rel": 1e-9,
+  "entries": [
+    {"cell": "Chp 27!B10", "result_id": "KH", "value": 1.1444475264, "units": "-"},
+    {"cell": "Chp 27!B11", "result_id": "QH", "value": 35.8605765708, "units": "psf"},
+    {"cell": "Chp 27!C26", "result_id": "LEEWARD_CP_X", "value": -0.2, "units": "-"},
+    {"cell": "Chp 27!D26", "result_id": "LEEWARD_CP_Y", "value": -0.5, "units": "-"},
+    {"cell": "Chp 27!C53", "result_id": "WALL_WW_L2_MIN", "value": 14.6904211208, "units": "psf"},
+    {"cell": "Chp 27!D53", "result_id": "WALL_WW_ROOF_MIN", "value": 17.9302882854, "units": "psf"},
+    {"cell": "Chp 27!C37", "result_id": "WALL_LW_X_MIN", "value": -12.5512017998, "units": "psf"},
+    {"cell": "Chp 27!D37", "result_id": "WALL_LW_Y_MIN", "value": -21.6956488253, "units": "psf"},
+    {"cell": "Chp 27!C40", "result_id": "WALL_SIDE_MIN", "value": -27.7919468424, "units": "psf"},
+    {"cell": "Chp 27!C52", "result_id": "WALL_WW_L2_MAX", "value": 27.6002286863, "units": "psf"},
+    {"cell": "Chp 27!D52", "result_id": "WALL_WW_ROOF_MAX", "value": 30.8400958509, "units": "psf"},
+    {"cell": "Chp 27!C36", "result_id": "WALL_LW_X_MAX", "value": 0.3586057657, "units": "psf"},
+    {"cell": "Chp 27!C39", "result_id": "WALL_SIDE_MAX", "value": -14.8821392769, "units": "psf"},
+    {"cell": "Chp 27!B64", "result_id": "PARAPET_TYP_WW", "value": 54.6763743998, "units": "psf"},
+    {"cell": "Chp 27!C64", "result_id": "PARAPET_TYP_LW", "value": -36.4509162665, "units": "psf"},
+    {"cell": "Chp 27!B72", "result_id": "PARAPET_PF_WW", "value": 55.6323940815, "units": "psf"},
+    {"cell": "Chp 27!C72", "result_id": "PARAPET_PF_LW", "value": -37.0882627210, "units": "psf"},
+    {"cell": "Chp 29!I16", "result_id": "PH_PH1_NET", "value": 40.4923284645, "units": "psf"},
+    {"cell": "Chp 29!I17", "result_id": "PH_PH2_NET", "value": 40.5888338495, "units": "psf"},
+    {"cell": "Chp 29!I18", "result_id": "PLAT_PL1_P", "value": 40.7729868226, "units": "psf"},
+    {"cell": "Chp 29!I19", "result_id": "EQ_CHILLER01_P", "value": 41.4753318196, "units": "psf"},
+    {"cell": "Chp 29!B23", "result_id": "EQ_CHILLER01_FX", "value": 3.5254032047, "units": "kip"},
+    {"cell": "Chp 29!B24", "result_id": "EQ_CHILLER01_FY", "value": 19.7422579461, "units": "kip"},
+    {"cell": "Chp 29!B27", "result_id": "PLAT_PL1_LINE", "value": 142.7054538790, "units": "plf"},
+    {"cell": "Chp 29!B37", "result_id": "PARAPET_PHP_WW", "value": 56.2885220954, "units": "psf"},
+    {"cell": "Chp 29!C37", "result_id": "PARAPET_PHP_LW", "value": -37.5256813969, "units": "psf"}
+  ]
+}
