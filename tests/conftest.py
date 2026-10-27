@@ -9,6 +9,15 @@ from air_apparent.workflow import WindSession
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = ROOT / "examples" / "reference_sample.yaml"
 TEMPLATE = ROOT / "templates" / "wind_inputs.yaml"
+TEST_MODEL_SNAPSHOT = ROOT / "tests" / "fixtures" / "test_model_snapshot.json"
+
+
+@pytest.fixture(scope="session")
+def test_model_snap():
+    """Snapshot captured from the live seven-story Test Model (python -m air_apparent.capture)."""
+    from air_apparent.snapshot_io import snapshot_from_json
+
+    return snapshot_from_json(TEST_MODEL_SNAPSHOT.read_text(encoding="utf-8"))
 
 
 @pytest.fixture
