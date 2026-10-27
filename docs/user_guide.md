@@ -41,7 +41,8 @@ Alternatively, launch the same GUI through Python:
 
 The window has a row of workflow buttons, an **ETABS pid:** field, a **Config / Diagnostics** tab,
 a **Preview groups / assignment table** tab, and a status message at the bottom. The supplied YAML
-loads at startup. You can use **Load/Reload YAML...** to select a different file.
+loads at startup. Without a YAML argument the app loads `templates/wind_inputs.yaml`.
+You can use **Load/Reload YAML...** to select a different file.
 
 ## 2. Complete the offline walkthrough
 
@@ -88,7 +89,8 @@ column and convert psf to kip/ft2.
 Click **Export report** and choose an output folder for this run. Open `report.html` in a browser.
 Review calculation results, pressure branches, minimum-load checks, eccentric torsion, combinations,
 and **Diagnostics and unresolved items**. This report contains plan diagnostics that are not all
-shown by the GUI's Calculate action.
+shown in the group table. The GUI's **Config / Diagnostics** tab also lists calculation results
+and every plan diagnostic after Calculate.
 
 The reference example uses illustrative cumulative story shears and selects the Max pressure branch
 for `-X`, with Min for the other directions. These are example inputs, not general project defaults.
@@ -243,7 +245,8 @@ only after verification has run. Keep the source YAML as well as the exported fi
 ## 6. Update inputs or geometry and rerun
 
 After changing YAML, reload it with **Load/Reload YAML...**. The GUI also detects changes to the
-file's modification time before button actions and reloads it. Rebuild dependent results using
+file's contents before button actions and reloads it when they change. A timestamp-only change
+does not clear the table or invalidate the results. Rebuild dependent results using
 **Inspect** -> **Calculate** -> **Create/Update preview groups** -> review -> **Review & apply** ->
 **Export report**.
 
@@ -274,7 +277,7 @@ Review leftover definitions separately when the scope changes.
 | `ecc_no_reference_joint` | The story is absent or lacks a reference joint. The current live reader needs additional integration; there is no GUI mapping control. |
 | Preview missing/outdated or membership differs | Recalculate if inputs changed, recreate preview groups, and review membership again. |
 | `group_name_conflict` / `name_conflict` | Check that the model and ownership manifest belong together. Resolve unrelated name collisions deliberately; do not remove unrelated content or the manifest merely to bypass the check. |
-| Plan has errors, but the cause is unclear | Export `report.html` and read Diagnostics and unresolved items; Calculate does not list every plan diagnostic in the GUI. |
+| Plan has errors, but the cause is unclear | Read Config / Diagnostics after Calculate, or export `report.html` and read Diagnostics and unresolved items. |
 | Apply stops partway | Record the failure and partial counts; inspect what changed. No rollback is performed. |
 | Read-back shows `FAIL` | Compare expected/actual values and definitions before accepting the result; retain the report for diagnosis. |
 | Export produces nothing | Click Calculate first to create a plan, then choose an output folder. |

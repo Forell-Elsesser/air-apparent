@@ -268,16 +268,25 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         return list(self.m.LoadPatterns.GetNameList()[1] or [])
 
     def read_cases(self) -> dict[str, tuple[tuple[str, float], ...]]:
+        """Read static-linear terms and retain other case names with no linear terms."""
         out = {}
-        for name in self.m.LoadCases.GetNameList()[1] or []:
-            r = self.m.LoadCases.StaticLinear.GetLoads(name)
-            out[name] = tuple(zip(r[3], r[4], strict=False)) if r and r[0] else ()
+        cases = self.m.LoadCases
+        for name in cases.GetNameList()[1] or []:
+            case_type = cases.GetTypeOAPI(name)
+            _ok(case_type[2], f"LoadCases.GetTypeOAPI({name})")
+            if case_type[0] != 1:
+                out[name] = ()
+                continue
+            r = cases.StaticLinear.GetLoads(name)
+            _ok(r[4], f"StaticLinear.GetLoads({name})")
+            out[name] = tuple(zip(r[2], r[3], strict=False)) if r[0] else ()
         return out
 
     def read_combinations(self) -> dict[str, tuple[str, tuple[tuple[str, float], ...]]]:
         out = {}
         for name in self.m.RespCombo.GetNameList()[1] or []:
             r = self.m.RespCombo.GetCaseList(name)
+            _ok(r[4], f"RespCombo.GetCaseList({name})")
             kind = "envelope" if self.m.RespCombo.GetTypeCombo(name)[0] == 1 else "linear"
-            out[name] = (kind, tuple(zip(r[3], r[4], strict=False)))
+            out[name] = (kind, tuple(zip(r[2], r[3], strict=False)))
         return out
