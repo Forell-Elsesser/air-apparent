@@ -8,6 +8,7 @@ shell ends in a category, a declared exclusion, or a diagnostic that names it.
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -41,6 +42,9 @@ from .segments import ResolvedSegment, penthouse_edges, place, resolve_segments
 Band = tuple[str, float, float]  # (story name, bottom, top)
 _EPS = 1e-6
 WALL, PARAPET, PH_BODY, PH_PARAPET = "wall", "parapet", "penthouse_body", "penthouse_parapet"
+EDGE_COVERAGE_MIN = 0.98
+ENVELOPE_LINE_COVERAGE_MIN = 0.25
+ENVELOPE_PAIR_OVERLAP_MIN = 0.25
 
 
 # --------------------------------------------------------------------------- R0 geometry
@@ -107,6 +111,50 @@ def element_type(level: str, levels: LevelRoles, bands: Sequence[Band]) -> str |
     names = [b[0] for b in bands]
     if level not in names:
         return None
+
+
+def _envelope(geometries: Sequence[ShellGeometry], roof_top: float, tolerance: float) -> dict[str, float]:
+        projected: dict[str, dict[float, list[tuple[float, float]]]] = {
+            "x": defaultdict(list), "y": defaultdict(list)}
+        for geometry in geometries:
+            if geometry.vertical and geometry.axis_aligned and geometry.zmax <= roof_top + tolerance:
+                coord = round(geometry.ordinate * 4) / 4
+                projected[geometry.axis][coord].append((geometry.lo, geometry.hi))
+
+        def merge_intervals(intervals: list[tuple[float, float]]) -> list[tuple[float, float]]:
+            merged: list[list[float]] = []
+            for lo, hi in sorted(intervals):
+                if merged and lo <= merged[-1][1] + _EPS:
+                    merged[-1][1] = max(merged[-1][1], hi)
+                else:
+                    merged.append([lo, hi])
+            return [(lo, hi) for lo, hi in merged]
+
+        def overlap_length(first: list[tuple[float, float]], second: list[tuple[float, float]]) -> float:
+            return sum(max(0.0, min(a_hi, b_hi) - max(a_lo, b_lo))
+                       for a_lo, a_hi in first for b_lo, b_hi in second)
+
+        envelope: dict[str, float] = {}
+        for axis in ("x", "y"):
+            lines = {coord: merge_intervals(intervals) for coord, intervals in projected[axis].items()}
+            coverage = {coord: sum(hi - lo for lo, hi in intervals) for coord, intervals in lines.items()}
+            if len(coverage) < 2:
+                continue
+            largest = max(coverage.values())
+            candidates = [coord for coord, length in coverage.items()
+                          if length >= ENVELOPE_LINE_COVERAGE_MIN * largest]
+            pairs = []
+            for index, first in enumerate(candidates):
+                for second in candidates[index + 1:]:
+                    overlap = overlap_length(lines[first], lines[second])
+                    smaller_line = min(coverage[first], coverage[second])
+                    if overlap >= ENVELOPE_PAIR_OVERLAP_MIN * smaller_line:
+                        low, high = sorted((first, second))
+                        pairs.append((high - low, smaller_line, overlap / smaller_line, overlap, low, high))
+            if pairs:
+                _, _, _, _, low, high = max(pairs)
+                envelope[f"{axis}_min"], envelope[f"{axis}_max"] = low, high
+        return envelope
     if levels.main_roof in names and names.index(level) <= names.index(levels.main_roof):
         return WALL
     if level in levels.parapet:
@@ -341,14 +389,6 @@ def categorize_frames(cfg: Config, snap: ModelSnapshot) -> tuple[dict[str, Objec
 
 
 # --------------------------------------------------------------------------- composition
-def _segment_extent(segs: Sequence[ResolvedSegment]) -> dict[str, float]:
-    xs = [s.ordinate_ft for s in segs if s.axis == "x"]
-    ys = [s.ordinate_ft for s in segs if s.axis == "y"]
-    if not xs or not ys:
-        return {}
-    return {"x_min": min(xs), "x_max": max(xs), "y_min": min(ys), "y_max": max(ys)}
-
-
 def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:
     from .groups import build_group_specs, build_pattern_groups, compare_groups
 
@@ -367,20 +407,65 @@ def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:
             out.diagnostics.append(Diagnostic("warning", "story_band_elevation_mismatch",
                                               f"story_bands {b.id!r} top {b.top_model_elevation_ft:g} ft vs model "
                                               f"{by_name[b.id][2]:g} ft"))
-    segs, _ = resolve_segments(cfg.exterior_segments, snap.grid_lines)
-    env = _segment_extent(segs)
+    roof_top = next((top for name, _bottom, top in bands
+                     if cfg.levels is not None and name == cfg.levels.main_roof), None)
+    settings = cfg.categorization
+    geometries = [shell_geometry(shell, settings) for shell in snap.shells]
+    env = _envelope(geometries, roof_top, settings.level_tolerance_ft) if roof_top is not None else {}
     out.envelope = env
-    if env:
+    has_envelope = all(key in env for key in ("x_min", "x_max", "y_min", "y_max"))
+    if has_envelope:
         lx, ly = env["x_max"] - env["x_min"], env["y_max"] - env["y_min"]
+        has_envelope = lx > settings.plane_tolerance_ft and ly > settings.plane_tolerance_ft
+    if not has_envelope:
+        if snap.shells:
+            out.diagnostics.append(Diagnostic(
+                "error", "unsupported_layout",
+                "cannot determine a rectangular main-building envelope with positive length and width "
+                f"from below-roof walls; inferred bounds: {env}. Check model units, main-roof elevation, "
+                "and the presence of opposing exterior walls in both directions"))
+    else:
         out.derived_dims = {"X": PlanDims(lx, ly), "Y": PlanDims(ly, lx)}
-        y = {"X": cfg.geometry.x_wind, "Y": cfg.geometry.y_wind}
-        for axis, d in out.derived_dims.items():
-            for name, a, b in (("parallel_l", d.parallel_l, y[axis].parallel_l),
-                               ("perpendicular_b", d.perpendicular_b, y[axis].perpendicular_b)):
-                if abs(a - b) > 0.005 * b:
+        declared = {"X": cfg.geometry.x_wind, "Y": cfg.geometry.y_wind}
+        for axis, dimensions in out.derived_dims.items():
+            for name, actual, expected in (("parallel_l", dimensions.parallel_l, declared[axis].parallel_l),
+                                           ("perpendicular_b", dimensions.perpendicular_b,
+                                            declared[axis].perpendicular_b)):
+                if abs(actual - expected) > 0.005 * expected:
                     out.diagnostics.append(Diagnostic(
                         "warning", "dimension_discrepancy",
-                        f"{axis}-wind {name}: declared segments span {a:g} ft vs YAML {b:g} ft"))
+                        f"{axis}-wind {name}: model envelope {actual:g} ft vs YAML {expected:g} ft"))
+
+        low_walls = [geometry for geometry in geometries
+                     if geometry.vertical and geometry.axis_aligned and roof_top is not None
+                     and geometry.zmax <= roof_top + settings.level_tolerance_ft]
+        if low_walls:
+            lowest_elevation = min(geometry.zmin for geometry in low_walls)
+            for axis, edge_key, span in (("x", "x_min", ly), ("x", "x_max", ly),
+                                         ("y", "y_min", lx), ("y", "y_max", lx)):
+                intervals = sorted(
+                    (max(geometry.lo, env["y_min" if axis == "x" else "x_min"]),
+                     min(geometry.hi, env["y_max" if axis == "x" else "x_max"]))
+                    for geometry in low_walls
+                    if geometry.axis == axis
+                    and abs(geometry.ordinate - env[edge_key]) <= settings.plane_tolerance_ft
+                    and abs(geometry.zmin - lowest_elevation) <= settings.level_tolerance_ft
+                    and min(geometry.hi, env["y_max" if axis == "x" else "x_max"])
+                    > max(geometry.lo, env["y_min" if axis == "x" else "x_min"]))
+                covered = 0.0
+                end = None
+                for start, stop in intervals:
+                    if end is None or start > end:
+                        covered += stop - start
+                    elif stop > end:
+                        covered += stop - end
+                    end = max(end, stop) if end is not None else stop
+                if covered < EDGE_COVERAGE_MIN * span:
+                    out.diagnostics.append(Diagnostic(
+                        "error", "unsupported_layout",
+                        f"envelope edge {edge_key}={env[edge_key]:g} is only {covered / span:.0%} covered "
+                        "by wall shells at the lowest level; the main-building rectangular layout "
+                        "cannot be confirmed"))
     out.groups = build_group_specs(cfg, snap, out.objects)
     out.pattern_groups = build_pattern_groups(out.objects)
     out.comparison = compare_groups(out.pattern_groups, snap.groups)

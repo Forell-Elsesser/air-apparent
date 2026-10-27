@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -33,6 +34,18 @@ def test_reapply_is_idempotent(session):
     before = {k: v.value for k, v in session.adapter.assignments.items()}
     session.apply()
     assert {k: v.value for k, v in session.adapter.assignments.items()} == before
+
+
+def test_readback_verification_checks_assignment_direction(session):
+    session.create_preview_groups()
+    assert session.apply().ok
+    expected = session.plan.assignments[0]
+    session.adapter.assign(replace(expected, global_dir="GlobalX"))
+
+    values = {row.check: row for row in session.verify()}
+
+    assert not values["assignment values"].ok
+    assert values["assignment values"].actual == "1 mismatches"
 
 
 def test_stale_assignments_cleared_when_plan_shrinks(session):
@@ -250,4 +263,3 @@ def test_retry_does_not_reuse_mismatched_case(session):
     session.adapter.fail_on = ""
     session.adapter.cases[case.name] = replace(case, terms=((case.terms[0][0], 2.0),))
     assert any(d.code == "name_conflict" for d in session.apply().diagnostics)
-

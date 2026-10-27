@@ -4,10 +4,12 @@ Desktop tool that calculates **ASCE 7-10 horizontal MWFRS wind loads** for recta
 buildings (precast perimeter walls, interior concrete frame, rooftop penthouses, parapets,
 mechanical platforms) and assigns them to an open **ETABS** model through the ETABS API.
 
-> Status: initial PR. Offline calculations, categorization, preview groups, load plan, patterns,
-> cases and combinations are implemented and tested against the reference workbook. **Live ETABS
-> operation has not been verified** (see [docs/etabs_setup.md](docs/etabs_setup.md)). W_Ecc and the
-> W1-W4 combinations are provisional project definitions, not yet engineering-reviewed.
+> Status: offline calculations, categorization, preview groups, load plan, patterns, cases and
+> combinations are tested against the reference workbook. ETABS 23.3.1 geometry, preview selection,
+> unit restoration and existing-load read-back were verified on a saved model copy. **Applying loads
+> remains blocked by model/configuration diagnostics and unowned definition conflicts** (see
+> [docs/etabs_setup.md](docs/etabs_setup.md)). W_Ecc and W1-W4 are provisional project definitions,
+> not yet engineering-reviewed.
 
 ## Install and test (no ETABS needed)
 

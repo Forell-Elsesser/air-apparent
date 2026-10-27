@@ -315,12 +315,21 @@ class WindSession:
         rows: list[VerifyRow] = []
         a = self.adapter
         plan = self.plan
-        have = {(x.kind, x.object_ref, x.pattern): x for x in a.read_assignments()
-                if x.pattern in {p.name for p in plan.patterns}}
+        patterns = {p.name for p in plan.patterns}
+        readback = a.read_assignments(patterns)
+        have = {}
+        duplicates = set()
+        for assignment in readback:
+            key = (assignment.kind, assignment.object_ref, assignment.pattern)
+            if key in have:
+                duplicates.add(key)
+            have[key] = assignment
         want = {(x.kind, x.object_ref, x.pattern): x for x in plan.assignments}
-        rows.append(VerifyRow("assignment count", str(len(want)), str(len(have)), len(want) == len(have)))
-        bad = [k for k, v in want.items() if k not in have
-               or not math.isclose(have[k].value, v.value, rel_tol=1e-9, abs_tol=1e-12)]
+        rows.append(VerifyRow("assignment count", str(len(want)), str(len(readback)),
+                              len(readback) == len(want) == len(have)))
+        bad = [k for k, v in want.items() if k in duplicates or k not in have
+               or not math.isclose(have[k].value, v.value, rel_tol=1e-9, abs_tol=1e-12)
+               or have[k].global_dir != v.global_dir]
         rows.append(VerifyRow("assignment values", "0 mismatches", f"{len(bad)} mismatches", not bad))
         pats = set(a.read_patterns())
         missing = [p.name for p in plan.patterns if p.name not in pats]

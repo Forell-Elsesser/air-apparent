@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import math
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -62,7 +64,7 @@ class EtabsAdapter(Protocol):
     def assign(self, a: Assignment) -> None:
         """Set a load with replace semantics, so reapplying never accumulates."""
     def clear_assignment(self, kind: str, object_ref: str, pattern: str) -> None: ...
-    def read_assignments(self) -> list[Assignment]: ...
+    def read_assignments(self, patterns: set[str] | None = None) -> list[Assignment]: ...
     def read_patterns(self) -> list[str]: ...
     def read_cases(self) -> dict[str, tuple[tuple[str, float], ...]]: ...
     def read_combinations(self) -> dict[str, tuple[str, tuple[tuple[str, float], ...]]]: ...
@@ -140,6 +142,16 @@ def _area_local3(response, name: str) -> tuple[float, float, float]:
     return (val[2], val[5], val[8])
 
 
+def _area_load_direction(csys: str, direction: int) -> str:
+    if csys == "Local" and direction in (1, 2, 3):
+        return f"Local{direction}"
+    if csys == "Global" and direction in (4, 5, 6):
+        return f"Global{'XYZ'[direction - 4]}"
+    if csys == "Projected" and direction in (7, 8, 9):
+        return f"Projected{'XYZ'[direction - 7]}"
+    raise AdapterError(f"unsupported area load coordinates: {csys} direction {direction}")
+
+
 class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
     def __init__(self, pid: int):
         try:
@@ -154,10 +166,18 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         self._pid = pid
         self.m = self._etabs.SapModel
         self._prior_units = self.m.GetPresentUnits()
-        _ok(self.m.SetPresentUnits(_KIP_FT_F), "SetPresentUnits(kip_ft_F)")
 
     def close(self) -> None:
-        self.m.SetPresentUnits(self._prior_units)
+        _ok(self.m.SetPresentUnits(self._prior_units), "restore present units")
+
+    @contextmanager
+    def _kip_ft_units(self):
+        prior_units = self.m.GetPresentUnits()
+        _ok(self.m.SetPresentUnits(_KIP_FT_F), "SetPresentUnits(kip_ft_F)")
+        try:
+            yield
+        finally:
+            _ok(self.m.SetPresentUnits(prior_units), "restore present units")
 
     # ---- info
     def info(self) -> ModelInfo:
@@ -205,6 +225,10 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         return systems, lines, diags
 
     def read_model(self) -> ModelSnapshot:
+        with self._kip_ft_units():
+            return self._read_model_in_kip_ft()
+
+    def _read_model_in_kip_ft(self) -> ModelSnapshot:
         m = self.m
         base, stories = self._read_stories(m)
         pr = m.PointObj.GetAllPoints()
@@ -352,63 +376,93 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
 
     # ---- assignments
     def assign(self, a: Assignment) -> None:
-        kind, obj = a.object_ref.split(":", 1)
-        if a.kind == "shell_pressure":
-            _ok(self.m.AreaObj.SetLoadUniform(obj, a.pattern, a.value, 3, True, "Local"),
-                f"AreaObj.SetLoadUniform({obj})")
-        elif a.kind == "joint_force":
-            vals = [0.0] * 6
-            vals[0 if a.global_dir == "X" else 1] = a.value
-            _ok(self.m.PointObj.SetLoadForce(obj, a.pattern, vals, True, "Global"),
-                f"PointObj.SetLoadForce({obj})")
-        elif a.kind == "joint_moment":
-            _ok(self.m.PointObj.SetLoadForce(obj, a.pattern, [0, 0, 0, 0, 0, a.value], True, "Global"),
-                f"PointObj.SetLoadForce({obj}) moment")
-        elif a.kind == "frame_line_load":
-            _ok(self.m.FrameObj.SetLoadDistributed(obj, a.pattern, 1, _DIR_CODE[a.global_dir], 0.0, 1.0,
-                                                   a.value, a.value, "Global", True, True),
-                f"FrameObj.SetLoadDistributed({obj})")
-        else:
-            raise AdapterError(f"unknown assignment kind {a.kind}")
+        with self._kip_ft_units():
+            kind, obj = a.object_ref.split(":", 1)
+            if a.kind == "shell_pressure":
+                _ok(self.m.AreaObj.SetLoadUniform(obj, a.pattern, a.value, 3, True, "Local"),
+                    f"AreaObj.SetLoadUniform({obj})")
+            elif a.kind == "joint_force":
+                vals = [0.0] * 6
+                vals[0 if a.global_dir == "X" else 1] = a.value
+                _ok(self.m.PointObj.SetLoadForce(obj, a.pattern, vals, True, "Global"),
+                    f"PointObj.SetLoadForce({obj})")
+            elif a.kind == "joint_moment":
+                _ok(self.m.PointObj.SetLoadForce(obj, a.pattern, [0, 0, 0, 0, 0, a.value], True, "Global"),
+                    f"PointObj.SetLoadForce({obj}) moment")
+            elif a.kind == "frame_line_load":
+                _ok(self.m.FrameObj.SetLoadDistributed(obj, a.pattern, 1, _DIR_CODE[a.global_dir], 0.0, 1.0,
+                                                       a.value, a.value, "Global", True, True),
+                    f"FrameObj.SetLoadDistributed({obj})")
+            else:
+                raise AdapterError(f"unknown assignment kind {a.kind}")
 
     def clear_assignment(self, kind: str, object_ref: str, pattern: str) -> None:
-        _, obj = object_ref.split(":", 1)
-        api = {"shell_pressure": lambda: self.m.AreaObj.DeleteLoadUniform(obj, pattern),
-               "joint_force": lambda: self.m.PointObj.DeleteLoadForce(obj, pattern),
-               "joint_moment": lambda: self.m.PointObj.DeleteLoadForce(obj, pattern),
-               "frame_line_load": lambda: self.m.FrameObj.DeleteLoadDistributed(obj, pattern)}[kind]
-        _ok(api(), f"clear {kind} {object_ref} {pattern}")
+        with self._kip_ft_units():
+            _, obj = object_ref.split(":", 1)
+            api = {"shell_pressure": lambda: self.m.AreaObj.DeleteLoadUniform(obj, pattern),
+                   "joint_force": lambda: self.m.PointObj.DeleteLoadForce(obj, pattern),
+                   "joint_moment": lambda: self.m.PointObj.DeleteLoadForce(obj, pattern),
+                   "frame_line_load": lambda: self.m.FrameObj.DeleteLoadDistributed(obj, pattern)}[kind]
+            _ok(api(), f"clear {kind} {object_ref} {pattern}")
 
-    def _loads(self, api, getter: str, width: int) -> list[tuple]:
-        """Rows of a Get*Load* call, by the built-in group ``All`` or, if that is refused, per object."""
-        r = getattr(api, getter)("All", 1)  # item type 1 = group
-        if r[-1] == 0:
-            return [tuple(r[i][k] for i in range(1, width)) for k in range(int(r[0]))]
-        rows: list[tuple] = []
-        for name in api.GetNameList()[1] or []:
-            r = getattr(api, getter)(name, 0)
-            _ok(r[-1], f"{getter}({name})")
-            rows += [tuple(r[i][k] for i in range(1, width)) for k in range(int(r[0]))]
-        return rows
-
-    def read_assignments(self) -> list[Assignment]:
-        """Tuple positions follow the documented out-parameter order (see docs/etabs_setup.md)."""
+    def read_assignments(self, patterns: set[str] | None = None) -> list[Assignment]:
         out: list[Assignment] = []
-        m = self.m
-        for nm, pat, _csys, _dir, v in self._loads(m.AreaObj, "GetLoadUniform", 6):
-            out.append(Assignment(f"{pat}|A:{nm}", "shell_pressure", f"A:{nm}", pat, v, "kip/ft2",
-                                  "Local3", ""))
-        for nm, pat, _step, _csys, f1, f2, _f3, _m1, _m2, m3 in self._loads(m.PointObj, "GetLoadForce", 11):
-            if f1:
-                out.append(Assignment(f"{pat}|P:{nm}", "joint_force", f"P:{nm}", pat, f1, "kip", "X", ""))
-            if f2:
-                out.append(Assignment(f"{pat}|P:{nm}", "joint_force", f"P:{nm}", pat, f2, "kip", "Y", ""))
-            if m3:
-                out.append(Assignment(f"{pat}|P:{nm}", "joint_moment", f"P:{nm}", pat, m3, "kip-ft", "Mz", ""))
-        frame_rows = self._loads(m.FrameObj, "GetLoadDistributed", 12)
-        for nm, pat, _type, _csys, d, _rd1, _rd2, _d1, _d2, v1, _v2 in frame_rows:
-            out.append(Assignment(f"{pat}|F:{nm}", "frame_line_load", f"F:{nm}", pat, v1, "kip/ft",
-                                  "X" if d == 4 else "Y", ""))
+        with self._kip_ft_units():
+            m = self.m
+            areas = m.AreaObj.GetNameList()
+            _ok(areas[-1], "AreaObj.GetNameList")
+            for name in areas[1] or []:
+                r = m.AreaObj.GetLoadUniform(name)
+                _ok(r[-1], f"AreaObj.GetLoadUniform({name})")
+                for nm, pat, csys, direction, value in zip(
+                        r[1], r[2], r[3], r[4], r[5], strict=True):
+                    if patterns is not None and pat not in patterns:
+                        continue
+                    axis = _area_load_direction(csys, direction)
+                    out.append(Assignment(f"{pat}|A:{nm}", "shell_pressure", f"A:{nm}", pat, value,
+                                          "kip/ft2", axis, ""))
+
+            points = m.PointObj.GetNameList()
+            _ok(points[-1], "PointObj.GetNameList")
+            for name in points[1] or []:
+                r = m.PointObj.GetLoadForce(name)
+                _ok(r[-1], f"PointObj.GetLoadForce({name})")
+                for nm, pat, csys, f1, f2, m3 in zip(
+                        r[1], r[2], r[4], r[5], r[6], r[10], strict=True):
+                    if patterns is not None and pat not in patterns:
+                        continue
+                    if csys != "Global":
+                        raise AdapterError(f"unsupported joint load coordinates for P:{nm} / {pat}: {csys}")
+                    if f1:
+                        out.append(Assignment(f"{pat}|P:{nm}", "joint_force", f"P:{nm}", pat,
+                                              f1, "kip", "X", ""))
+                    if f2:
+                        out.append(Assignment(f"{pat}|P:{nm}", "joint_force", f"P:{nm}", pat,
+                                              f2, "kip", "Y", ""))
+                    if m3:
+                        out.append(Assignment(f"{pat}|P:{nm}", "joint_moment", f"P:{nm}", pat,
+                                              m3, "kip-ft", "Mz", ""))
+
+            frames = m.FrameObj.GetNameList()
+            _ok(frames[-1], "FrameObj.GetNameList")
+            for name in frames[1] or []:
+                r = m.FrameObj.GetLoadDistributed(name)
+                _ok(r[-1], f"FrameObj.GetLoadDistributed({name})")
+                for nm, pat, load_type, csys, direction, relative1, relative2, value1, value2 in zip(
+                        r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[10], r[11], strict=True):
+                    if patterns is not None and pat not in patterns:
+                        continue
+                    if csys != "Global" or direction not in (4, 5):
+                        raise AdapterError(f"unsupported frame load coordinates for F:{nm} / {pat}: "
+                                           f"{csys} direction {direction}")
+                    if load_type != 1 or not math.isclose(relative1, 0.0) \
+                            or not math.isclose(relative2, 1.0):
+                        raise AdapterError(f"unsupported frame load distribution for F:{nm} / {pat}")
+                    if value1 != value2:
+                        raise AdapterError(f"non-uniform frame load on F:{nm} / {pat} cannot be "
+                                           "represented by a single assignment value")
+                    out.append(Assignment(f"{pat}|F:{nm}", "frame_line_load", f"F:{nm}", pat, value1,
+                                          "kip/ft", "X" if direction == 4 else "Y", ""))
         return out
 
     def read_patterns(self) -> list[str]:

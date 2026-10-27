@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from ..models import Config, PlanDims, PressureSet
 from . import asce7_10
 from .eccentricity import EccStory, eccentric_torsion, eccentricity_length
@@ -37,4 +39,12 @@ def calculate_pressures(cfg: Config, dims: dict[str, PlanDims] | None = None) ->
         )
     if dims is None:
         dims = {"X": cfg.geometry.x_wind, "Y": cfg.geometry.y_wind}
+    for axis in ("X", "Y"):
+        if axis not in dims:
+            raise ValueError(f"missing plan dimensions for {axis}-wind")
+        for name in ("parallel_l", "perpendicular_b"):
+            value = getattr(dims[axis], name)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{axis}-wind {name} must be finite and greater than zero; "
+                                 f"got {value!r} ft. Check the model envelope and input dimensions")
     return module.calculate(cfg, dims)

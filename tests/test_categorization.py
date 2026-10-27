@@ -101,3 +101,43 @@ def test_unresolved_shell_carries_a_load_issue(cfg, snap):
     c = categorize(cfg, snap)
     assert c.objects["A:STRAY"].load_issue and "no exterior segment" in c.objects["A:STRAY"].load_issue
     assert all(not o.load_issue for o in c.objects.values() if o.category != "unresolved")
+
+
+def test_one_wall_line_per_axis_does_not_produce_zero_plan_dimensions(cfg, snap):
+    shells = [
+        Shell("X", ((0, 0, 0), (0, 100, 0), (0, 100, 30), (0, 0, 30)), (1, 0, 0)),
+        Shell("Y", ((0, 0, 0), (100, 0, 0), (100, 0, 30), (0, 0, 30)), (0, 1, 0)),
+    ]
+    cats = categorize(cfg, replace(snap, shells=shells, frames=[], joints=[]))
+
+    assert cats.derived_dims == {}
+    assert any(d.code == "unsupported_layout" and d.level == "error"
+               and "positive length and width" in d.message for d in cats.diagnostics)
+
+
+def test_envelope_uses_unique_projected_coverage_and_opposing_lines(cfg, snap):
+    shells = []
+    for z0, z1 in ((0.0, 30.0), (30.0, 60.0)):
+        shells.extend([
+            Shell(f"WEST_{z0}_A", ((0, 0, z0), (0, 20, z0), (0, 20, z1), (0, 0, z1)), (1, 0, 0)),
+            Shell(f"WEST_{z0}_B", ((0, 80, z0), (0, 100, z0), (0, 100, z1), (0, 80, z1)), (1, 0, 0)),
+            Shell(f"EAST_{z0}", ((100, 0, z0), (100, 100, z0), (100, 100, z1), (100, 0, z1)),
+                  (-1, 0, 0)),
+            Shell(f"SOUTH_{z0}", ((0, 0, z0), (100, 0, z0), (100, 0, z1), (0, 0, z1)), (0, 1, 0)),
+            Shell(f"NORTH_{z0}", ((0, 100, z0), (100, 100, z0), (100, 100, z1), (0, 100, z1)),
+                  (0, -1, 0)),
+        ])
+    cats = categorize(cfg, replace(snap, shells=shells, frames=[], joints=[]))
+
+    assert cats.envelope == {"x_min": 0.0, "x_max": 100.0, "y_min": 0.0, "y_max": 100.0}
+    assert cats.derived_dims["X"].parallel_l == 100.0
+    assert any(d.code == "unsupported_layout" and d.level == "error"
+               and "only 40% covered" in d.message for d in cats.diagnostics)
+
+
+def test_incomplete_lowest_story_wall_coverage_blocks_unsupported_layout(cfg, snap):
+    kept = [shell for shell in snap.shells
+            if not shell.name.startswith("W_S_L2_") or shell.name.endswith(("1", "2"))]
+    cats = categorize(cfg, replace(snap, shells=kept))
+
+    assert any(d.code == "unsupported_layout" and d.level == "error" for d in cats.diagnostics)

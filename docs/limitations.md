@@ -29,5 +29,8 @@
   missing members.
 - **Envelope combinations** give independent extrema, not one simultaneous load state; concurrent
   force vectors are preserved only in the individual linear combinations.
-- **Live ETABS:** not verified. See `docs/etabs_setup.md`.
+- **Live ETABS:** ETABS 23.3.1 geometry, preview-group selection, unit restoration, and existing-load
+  read-back were verified on a saved working copy. Apply remains blocked by layout diagnostics and
+  unowned definition conflicts; load setters and post-apply verification have not been tested. See
+  `docs/etabs_setup.md`.
 - No rollback is implemented: a failed apply reports exactly what was done and stops dependent writes.

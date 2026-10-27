@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from air_apparent.etabs.adapter import AdapterError, ComEtabsAdapter, _area_local3, _case_type, _static_case_terms
+from air_apparent.models import Assignment
 
 
 def test_area_local3_uses_matrix_column_for_global_normal():
@@ -172,18 +173,72 @@ def test_read_combinations_uses_case_names_and_factors_from_etabs_results():
     }
 
 
-def test_read_assignments_uses_documented_tuple_positions():
-    api = SimpleNamespace(
-        AreaObj=SimpleNamespace(GetLoadUniform=lambda n, t: [1, ("A1",), ("W_Wall_+X",), ("Global",), (4,), (0.5,), 0]),
-        PointObj=SimpleNamespace(GetLoadForce=lambda n, t: [1, ("P1",), ("W_Mech_+X",), (0,), ("Global",),
-                                                            (1.5,), (0.0,), (0.0,), (0.0,), (0.0,), (7.0,), 0]),
-        FrameObj=SimpleNamespace(GetLoadDistributed=lambda n, t: [1, ("B1",), ("W_Mech_+Y",), (1,), ("Global",),
-                                                                  (5,), (0,), (1,), (0,), (10,), (0.25,), (0.25,), 0]),
+def test_geometry_and_load_operations_restore_present_units():
+    units = {"current": 3}
+
+    def names():
+        assert units["current"] == 4
+        return [0, (), 0]
+
+    def set_load(*args):
+        assert units["current"] == 4
+        return 0
+
+    model = SimpleNamespace(
+        GetPresentUnits=lambda: units["current"],
+        SetPresentUnits=lambda value: (units.update(current=value) or 0),
+        AreaObj=SimpleNamespace(GetNameList=names, SetLoadUniform=set_load, DeleteLoadUniform=set_load),
     )
-    out = {(a.kind, a.object_ref, a.global_dir): a.value for a in _adapter_with_api(api).read_assignments()}
-    assert out[("joint_force", "P:P1", "X")] == 1.5
-    assert out[("joint_moment", "P:P1", "Mz")] == 7.0
-    assert out[("frame_line_load", "F:B1", "Y")] == 0.25
+    adapter = _adapter_with_api(model)
+    adapter._read_model_in_kip_ft = lambda: (units["current"] == 4)
+
+    assert adapter.read_model()
+    assignment = Assignment("W_X|A:W1", "shell_pressure", "A:W1", "W_X", 0.02,
+                            "kip/ft2", "Local3", "WALL")
+    adapter.assign(assignment)
+    adapter.clear_assignment("shell_pressure", "A:W1", "W_X")
+
+    assert units["current"] == 3
+
+
+def test_read_assignments_uses_live_oapi_indices_and_filters_patterns():
+    units = {"current": 3}
+
+    def names(*values):
+        assert units["current"] == 4
+        return [len(values), values, 0]
+
+    def area_load(name):
+        assert units["current"] == 4
+        return [1, (name,), ("W",), ("Local",), (3,), (0.02,), 0]
+
+    def point_load(name):
+        assert units["current"] == 4
+        return [1, (name,), ("W",), (0,), ("Global",), (2.0,), (-3.0,),
+                (0.0,), (0.0,), (0.0,), (4.0,), 0]
+
+    def frame_load(name):
+        assert units["current"] == 4
+        return [1, (name,), ("W",), (1,), ("Global",), (4,), (0.0,), (1.0,),
+                (0.0,), (1.0,), (5.0,), (5.0,), 0]
+
+    model = SimpleNamespace(
+        GetPresentUnits=lambda: units["current"],
+        SetPresentUnits=lambda value: (units.update(current=value) or 0),
+        AreaObj=SimpleNamespace(GetNameList=lambda: names("A1"), GetLoadUniform=area_load),
+        PointObj=SimpleNamespace(GetNameList=lambda: names("P1"), GetLoadForce=point_load),
+        FrameObj=SimpleNamespace(GetNameList=lambda: names("F1"), GetLoadDistributed=frame_load),
+    )
+    assignments = _adapter_with_api(model).read_assignments({"W"})
+
+    assert {(a.kind, a.object_ref, a.value, a.global_dir) for a in assignments} == {
+        ("shell_pressure", "A:A1", 0.02, "Local3"),
+        ("joint_force", "P:P1", 2.0, "X"),
+        ("joint_force", "P:P1", -3.0, "Y"),
+        ("joint_moment", "P:P1", 4.0, "Mz"),
+        ("frame_line_load", "F:F1", 5.0, "X"),
+    }
+    assert units["current"] == 3
 
 
 def test_read_stories_is_bottom_up_with_heights():
