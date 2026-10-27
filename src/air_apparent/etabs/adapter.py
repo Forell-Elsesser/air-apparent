@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from dataclasses import dataclass
 from typing import Protocol
 
 from ..models import (
@@ -30,7 +31,15 @@ from ..models import (
 from .errors import AdapterError
 from .tables import find_grid_table, length_factor, parse_grid_table
 
-__all__ = ["AdapterError", "ComEtabsAdapter", "EtabsAdapter", "connect_live", "list_instances"]
+__all__ = ["AdapterError", "ComEtabsAdapter", "EtabsAdapter", "GroupWriteResult", "connect_live", "list_instances"]
+
+
+@dataclass(frozen=True)
+class GroupWriteResult:
+    """Outcome of a group write: members ETABS refused (with return codes) and members absent on read-back."""
+
+    refused: tuple[tuple[str, int], ...] = ()
+    missing_after_readback: tuple[str, ...] = ()
 
 
 class EtabsAdapter(Protocol):
@@ -38,10 +47,12 @@ class EtabsAdapter(Protocol):
     def read_model(self) -> ModelSnapshot: ...
     def read_groups(self, prefix: str = "W_") -> dict[str, list[str]]:
         """Groups whose names start with ``prefix`` (case-insensitive), keyed by the model's spelling."""
-    def set_group(self, name: str, members: list[str]) -> None:
+    def set_group(self, name: str, members: list[str]) -> GroupWriteResult:
         """Create the group or replace its membership entirely."""
     def delete_group(self, name: str) -> None: ...
     def select_group(self, name: str) -> None: ...
+    def select_objects(self, refs: list[str]) -> None:
+        """Select exactly these objects (``A:``/``F:``/``P:`` refs) in the ETABS view."""
     def unlock(self) -> None: ...
     def read_manifest(self) -> dict: ...
     def write_manifest(self, manifest: dict) -> None: ...
@@ -218,14 +229,41 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         return out
 
     # ---- groups
-    def set_group(self, name: str, members: list[str]) -> None:
-        if name in self.read_groups(""):
-            _ok(self.m.GroupDef.Delete(name), f"GroupDef.Delete({name})")
-        _ok(self.m.GroupDef.SetGroup(name), f"GroupDef.SetGroup({name})")
+    def _object_api(self, ref: str):
+        kind, obj = ref.split(":", 1)
+        return getattr(self.m, {"A": "AreaObj", "F": "FrameObj", "P": "PointObj"}[kind]), obj
+
+    def set_group(self, name: str, members: list[str]) -> GroupWriteResult:
+        """Replace a group's membership (spec 8.1): read flags, delete, recreate, assign, read back."""
+        gd = self.m.GroupDef
+        n, names, ret = gd.GetNameList()
+        _ok(ret, "GroupDef.GetNameList")
+        existing = next((str(g) for g in names or [] if str(g).lower() == name.lower()), None)
+        colour, flags = -1, ()
+        if existing is not None:
+            name = existing  # keep the model's own spelling
+            r = gd.GetGroup_1(name)
+            _ok(r[-1], f"GroupDef.GetGroup_1({name})")
+            colour, flags = int(r[0]), tuple(bool(v) for v in r[1:-1])
+            deleted = gd.Delete(name)
+            still = [str(g) for g in (gd.GetNameList()[1] or []) if str(g).lower() == name.lower()]
+            if deleted != 0 and still:
+                raise AdapterError(f"group {name} could not be emptied (code {deleted}); "
+                                   "it may still hold earlier members")
+        _ok(gd.SetGroup_1(name, colour, *flags), f"GroupDef.SetGroup_1({name})")
+        refused: list[tuple[str, int]] = []
         for ref in members:
-            kind, obj = ref.split(":", 1)
-            api = {"A": self.m.AreaObj, "F": self.m.FrameObj, "P": self.m.PointObj}[kind]
-            _ok(api.SetGroupAssign(obj, name), f"SetGroupAssign({ref}, {name})")
+            api, obj = self._object_api(ref)
+            code = api.SetGroupAssign(obj, name)
+            if code != 0:
+                refused.append((ref, int(code)))
+        n2, types, objs, r = gd.GetAssignments(name)
+        _ok(r, f"GroupDef.GetAssignments({name})")
+        tag = {1: "P", 2: "F", 5: "A"}
+        present = {f"{tag[t]}:{o}" for t, o in zip(types or (), objs or (), strict=True) if t in tag}
+        refused_refs = {ref for ref, _ in refused}
+        missing = tuple(ref for ref in members if ref not in present and ref not in refused_refs)
+        return GroupWriteResult(tuple(refused), missing)
 
     def delete_group(self, name: str) -> None:
         _ok(self.m.GroupDef.Delete(name), f"GroupDef.Delete({name})")
@@ -233,7 +271,14 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
     def select_group(self, name: str) -> None:
         _ok(self.m.SelectObj.ClearSelection(), "ClearSelection")
         _ok(self.m.SelectObj.Group(name), f"SelectObj.Group({name})")
-        self._etabs.SapModel.View.RefreshView()
+        self._etabs.SapModel.View.RefreshView(0, False)
+
+    def select_objects(self, refs: list[str]) -> None:
+        _ok(self.m.SelectObj.ClearSelection(), "ClearSelection")
+        for ref in refs:
+            api, obj = self._object_api(ref)
+            _ok(api.SetSelected(obj, True), f"SetSelected({ref})")
+        self._etabs.SapModel.View.RefreshView(0, False)
 
     # ---- manifest (stored next to the model file)
     def _manifest_path(self) -> str:

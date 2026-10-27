@@ -26,11 +26,12 @@ PENTHOUSE_BODY = "penthouse_body"
 PENTHOUSE_PARAPET = "penthouse_parapet"
 PLATFORM_FRAME = "mechanical_platform_frame"
 EQUIPMENT_JOINT = "equipment_support_joint"
+EQUIPMENT_SUPPORT_FRAME = "equipment_support_frame"
 EXCLUDED = "excluded"
 UNRESOLVED = "unresolved"
 CATEGORIES = (
     MAIN_WALL, STAIR_PROJECTION, MAIN_PARAPET, PICTURE_FRAME_PARAPET, PENTHOUSE_BODY,
-    PENTHOUSE_PARAPET, PLATFORM_FRAME, EQUIPMENT_JOINT, EXCLUDED, UNRESOLVED,
+    PENTHOUSE_PARAPET, PLATFORM_FRAME, EQUIPMENT_JOINT, EQUIPMENT_SUPPORT_FRAME, EXCLUDED, UNRESOLVED,
 )
 
 # Face roles
@@ -38,6 +39,9 @@ WINDWARD, LEEWARD, SIDE = "WINDWARD", "LEEWARD", "SIDE"
 
 # Pattern families
 WALL, PARAPET, PH, MECH, ECC = "Wall", "Parapet", "PH", "Mech", "Ecc"
+
+# The sixteen per-pattern groups the tool reads, compares and writes (spec section 8).
+PATTERN_GROUP_NAMES = tuple(f"W_{family}_{d}" for family in ("Wall", "Parapet", "PH", "Mech") for d in DIRECTIONS)
 
 # --------------------------------------------------------------------------- configuration
 @dataclass(frozen=True)
@@ -119,7 +123,45 @@ class Equipment:
     height_ft: float
     extent_x_ft: float
     extent_y_ft: float
-    support_joints: tuple[str, ...]
+    support_joints: tuple[str, ...] = ()  # four existing joints (joint loads, Patterns)
+    support_frames: tuple[str, ...] = ()  # four existing beams (W_Mech grouping)
+
+
+@dataclass(frozen=True)
+class ExteriorSegment:
+    """A stretch of exterior wall: a line, a range along it and which side is outside."""
+
+    id: str
+    along: str | float  # grid label or ordinate (ft)
+    start: str | float  # grid label or ordinate (ft) along the perpendicular axis
+    end: str | float
+    outside: str  # "+X" | "-X" | "+Y" | "-Y" | "none" (declared unexposed)
+    axis: str = ""  # "x" or "y" when ``along`` is numeric; "" when a grid label fixes it
+    z_from: float | None = None  # optional height range, model elevation (ft)
+    z_to: float | None = None
+
+
+@dataclass(frozen=True)
+class CategorizationSettings:
+    plane_tolerance_ft: float = 0.1
+    extent_tolerance_ft: float = 0.5
+    level_tolerance_ft: float = 0.05
+
+
+@dataclass(frozen=True)
+class LevelRoles:
+    main_roof: str
+    parapet: tuple[str, ...]
+    penthouse_body: tuple[str, ...]
+    penthouse_parapet: tuple[str, ...]
+    mechanical: str
+
+
+@dataclass(frozen=True)
+class Override:
+    category: str
+    component: str = ""
+    outside: str = ""
 
 
 @dataclass(frozen=True)
@@ -148,7 +190,10 @@ class Config:
     equipment: tuple[Equipment, ...]
     platforms: tuple[Platform, ...]
     rooftop_net_force_coefficient_cf: float
-    overrides: dict[str, str]
+    overrides: dict[str, Override]
+    exterior_segments: tuple[ExteriorSegment, ...] = ()
+    categorization: CategorizationSettings = CategorizationSettings()
+    levels: LevelRoles | None = None
     raw: dict[str, Any] = field(default_factory=dict, compare=False)  # normalized YAML mapping
     source_path: str = ""
 
@@ -289,11 +334,14 @@ class ObjectCategory:
     ref: str
     category: str
     reason: str
-    band: str = ""  # story/elevation band id
+    level: str = ""  # story band containing the object's top edge
     component: str = ""  # penthouse / equipment / platform id
     parapet_type: str = ""  # parapet type id for parapet categories
     outward_normal: tuple[float, float, float] | None = None
     overridden: bool = False
+    segment_id: str = ""  # exterior segment or penthouse edge the shell was placed on
+    outside: str = ""  # "+X" | "-X" | "+Y" | "-Y" from that segment
+    side: str = ""  # side label for group specs (segment id); "X"/"Y"/"XY" for platform frames
 
 
 @dataclass(frozen=True)
@@ -301,7 +349,7 @@ class GroupSpec:
     name: str
     members: tuple[str, ...]
     category: str
-    band: str
+    level: str  # story band of the members' top edges
     direction: str
     role: str
     result_id: str
@@ -309,15 +357,29 @@ class GroupSpec:
     component: str = ""
     assignment_sign: int = 1  # sign applied to code pressure to get the ETABS local-3 value
     note: str = ""
+    side: str = ""  # segment id (side relative to centre) or mech axis
+
+
+@dataclass(frozen=True)
+class GroupComparison:
+    """Rule membership of one W_* group against the model's existing group of that name."""
+
+    name: str
+    in_model: int
+    by_rules: int
+    missing_from_rules: tuple[str, ...]  # refs in the model's group but not the tool's
+    extra_in_rules: tuple[str, ...]
 
 
 @dataclass
 class Categorization:
     objects: dict[str, ObjectCategory] = field(default_factory=dict)
-    envelope: dict[str, float] = field(default_factory=dict)  # x_min,x_max,y_min,y_max
+    envelope: dict[str, float] = field(default_factory=dict)  # extent of the declared segments
     derived_dims: dict[str, PlanDims] = field(default_factory=dict)
-    groups: list[GroupSpec] = field(default_factory=list)
+    groups: list[GroupSpec] = field(default_factory=list)  # fine groups (not written to ETABS)
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    pattern_groups: dict[str, list[str]] = field(default_factory=dict)  # the sixteen W_* -> refs
+    comparison: list[GroupComparison] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- patterns

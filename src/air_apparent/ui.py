@@ -11,8 +11,8 @@ from .reporting import export_all, group_table
 from .workflow import WindSession
 
 DEFAULT_YAML = Path(__file__).resolve().parents[2] / "templates" / "wind_inputs.yaml"
-GROUP_COLUMNS = ("group", "category", "band", "direction", "role", "result_id", "value", "pattern",
-                 "members", "sign")
+GROUP_COLUMNS = ("group", "category", "level", "side", "direction", "role", "result_id", "value",
+                 "pattern", "members", "sign")
 
 
 class App:
@@ -37,7 +37,7 @@ class App:
         for text, cmd in (
             ("Load/Reload YAML...", self.load_yaml), ("Offline demo", self.demo),
             ("Connect ETABS", self.connect), ("Inspect", self.inspect), ("Calculate", self.calculate),
-            ("Create/Update preview groups", self.groups), ("Select group in ETABS", self.select),
+            ("Write W_ groups", self.groups), ("Select group in ETABS", self.select),
             ("Review & apply", self.apply), ("Export report", self.export),
         ):
             ttk.Button(row, text=text, command=lambda c=cmd: self._run(c)).pack(side="left", padx=2)
@@ -95,6 +95,12 @@ class App:
         self.tree.delete(*self.tree.get_children())
         self.status.set("YAML loaded; dependent results invalidated")
 
+    def close_adapter(self) -> None:
+        """Restore ETABS present units by closing a live adapter, if one is connected."""
+        close = getattr(self.s.adapter, "close", None)
+        if close is not None:
+            close()
+
     # -------------------------------------------------------------- actions
     def load_yaml(self) -> None:
         from tkinter import filedialog
@@ -110,6 +116,7 @@ class App:
     def connect(self) -> None:
         from .etabs import connect_live, list_instances
         pid = int(self.pid.get()) if self.pid.get().strip() else None
+        self.close_adapter()
         ad = connect_live(pid)
         self.s.connect(ad)
         self.tree.delete(*self.tree.get_children())
@@ -137,6 +144,12 @@ class App:
         self.s.build_plan()
         selected = set(self.tree.selection())
         self.tree.delete(*self.tree.get_children())
+        for row in self.s.cats.comparison:  # the sixteen W_ groups first: what the rules give vs the model
+            values = {"group": row.name, "category": "pattern", "level": "", "side": "",
+                      "direction": row.name.rsplit("_", 1)[1], "role": "", "result_id": "",
+                      "value": f"{row.by_rules} by rules / {row.in_model} in model", "pattern": row.name,
+                      "members": row.by_rules, "sign": ""}
+            self.tree.insert("", "end", iid=row.name, values=[values[c] for c in GROUP_COLUMNS])
         for r in group_table(self.s):
             self.tree.insert("", "end", iid=r["group"], values=[r[c] for c in GROUP_COLUMNS])
         retained = selected.intersection(self.tree.get_children())
@@ -146,21 +159,25 @@ class App:
         self.text.insert("end", effective_config_yaml(self.s.cfg) + "\n--- Calculation results ---\n")
         for r in self.s.pressures.results.values():
             self.text.insert("end", f"{r.id}: {r.value:.6g} {r.units}\n")
-        self.text.insert("end", "\n--- Preview diagnostics ---\n")
-        self.text.insert("end", f"Model envelope: {self.s.cats.envelope}\n")
+        self.text.insert("end", "\n--- W_ groups: rules vs model ---\n")
+        for row in self.s.cats.comparison:
+            diff = ("exact" if not row.missing_from_rules and not row.extra_in_rules else
+                    f"{len(row.missing_from_rules)} in model only, {len(row.extra_in_rules)} by rules only")
+            self.text.insert("end", f"{row.name}: {row.by_rules} by rules / {row.in_model} in model ({diff})\n")
+        self.text.insert("end", "\n--- Diagnostics ---\n")
         for d in self.s.plan.diagnostics:
             obj = f" ({d.object_ref})" if d.object_ref else ""
             self.text.insert("end", f"[{d.level}] {d.code}{obj}: {d.message}\n")
         unresolved = sum(o.category == "unresolved" for o in self.s.cats.objects.values())
         self.status.set(f"Calculated: {len(self.s.pressures.results)} results, "
                         f"{len(self.s.plan.assignments)} assignments, {len(self.s.plan.groups)} groups; "
-                        f"{unresolved} unresolved objects. Select a group to preview in ETABS.")
+                        f"{unresolved} unresolved objects. Select a W_ group to write and show it in ETABS.")
 
     def groups(self) -> None:
         if self.s.plan is None:
             self.calculate()
-        diags = self.s.create_preview_groups()
-        self.status.set("Preview groups created/updated (no loads applied)" if not diags
+        diags = self.s.write_pattern_groups()
+        self.status.set("Wrote 16 W_ groups to the model (no loads applied)" if not diags
                         else "; ".join(d.message for d in diags))
 
     def select(self) -> None:
@@ -210,7 +227,15 @@ def main() -> None:
                     help="wind inputs YAML to load at startup (default: templates/wind_inputs.yaml)")
     args = ap.parse_args()
     root = tk.Tk()
-    App(root, args.yaml)
+    app = App(root, args.yaml)
+
+    def on_close() -> None:
+        try:
+            app.close_adapter()
+        finally:
+            root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
     root.mainloop()
 
 

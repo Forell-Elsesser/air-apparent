@@ -35,7 +35,7 @@ def mech_assignments(cfg: Config, ps: PressureSet, direction: str,
                 continue
             out.append(Assignment(
                 f"{pattern}|P:{j}", "joint_force", f"P:{j}", pattern, sgn * force / 4.0, "kip", axis,
-                f"EQ_{eq.id}_F{axis}", group=f"AA_PREVIEW_MECH_{eq.id}_JOINTS", direction=direction,
+                f"EQ_{eq.id}_F{axis}", group=f"MECH_{eq.id}_JOINTS", direction=direction,
                 note="equal share of horizontal resultant; overturning moment not included"))
     for pl in cfg.platforms:
         frames = pl.frames_x_wind if axis == "X" else pl.frames_y_wind
@@ -45,7 +45,7 @@ def mech_assignments(cfg: Config, ps: PressureSet, direction: str,
                 continue
             out.append(Assignment(
                 f"{pattern}|F:{fr}", "frame_line_load", f"F:{fr}", pattern, sgn * plf / 1000.0,
-                "kip/ft", axis, f"PLAT_{pl.id}_LINE", group=f"AA_PREVIEW_MECH_{pl.id}_FRAMES_{axis}",
+                "kip/ft", axis, f"PLAT_{pl.id}_LINE", group=f"MECH_{pl.id}_FRAMES_{axis}",
                 direction=direction))
     return out
 
@@ -88,6 +88,11 @@ def build_assignments(cfg: Config, snap: ModelSnapshot, cats: Categorization,
     out += mech
     diags += verify_mech_reversibility(cfg, ps)
     for eq in cfg.equipment:
+        if not eq.support_joints:
+            diags.append(Diagnostic("warning", "equipment_loads_deferred",
+                                    f"{eq.id}: configured by support frames only; its loads are not generated "
+                                    "until equipment loads move to frame point loads (frames are grouped)"))
+            continue
         total = sum(a.value for a in mech if a.object_ref in {f"P:{j}" for j in eq.support_joints}
                     and a.pattern.endswith("X"))
         if abs(total - ps.value(f"EQ_{eq.id}_FX")) > 1e-9:
@@ -139,8 +144,8 @@ def build_plan(cfg: Config, snap: ModelSnapshot, cats: Categorization, ps: Press
     unresolved = [o for o in cats.objects.values() if o.category == "unresolved"]
     if unresolved:
         diags.append(Diagnostic("warning", "unresolved_objects",
-                                f"{len(unresolved)} unresolved object(s) receive no load; see "
-                                "AA_PREVIEW_UNRESOLVED"))
+                                f"{len(unresolved)} unresolved object(s) receive no load; see the "
+                                "per-object diagnostics"))
     plan = LoadPlan(
         patterns=pattern_specs(), cases=case_specs(), assignments=assignments,
         combinations=build_combinations(), groups=list(cats.groups), diagnostics=diags,

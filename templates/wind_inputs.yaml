@@ -1,8 +1,8 @@
-# air-apparent wind inputs template (schema_version 1). Copy, then edit every value.
+# air-apparent wind inputs template (schema_version 2). Copy, then edit every value.
 # YAML is the only source of wind parameters; the GUI displays but does not edit them.
 # Full schema: docs/module_interfaces.md ("Configuration schema").
 
-schema_version: 1
+schema_version: 2
 code_edition: "ASCE 7-10"          # unsupported editions are rejected, never mapped to ASCE 7-10
 units: "US"                         # ft, psf, kip
 
@@ -43,6 +43,22 @@ loading:
   # Optional cumulative story shears (kip, top story first) used for W_Ecc:
   # story_shears_kip:
   #   "+X": {ROOF: 100.0, L2: 220.0}
+
+# Exterior wall segments of the synthetic demo building (grid labels from air_apparent.demo).
+# along/from/to accept a grid label (quoted when numeric-looking) or a number in feet.
+exterior_segments:
+  - {id: S, along: A, from: "1", to: "2", outside: "-Y"}
+  - {id: N, along: B, from: "1", to: "2", outside: "+Y"}
+  - {id: W, along: "1", from: A, to: B, outside: "-X"}
+  - {id: E, along: "2", from: A, to: B, outside: "+X"}
+
+# Which model stories play which role: bands at or below main_roof are walls.
+levels:
+  main_roof: ROOF
+  parapet: [PARAPET_TYP, PARAPET_PF]
+  penthouse_body: [PH_ROOF]
+  penthouse_parapet: [PH_PARAPET]
+  mechanical: PARAPET_PF
 
 grade:
   datum_model_elevation_ft: 0.0           # model elevation of grade (model z, ft)
@@ -86,4 +102,4 @@ parapets:
 #     extent_y_ft: 10.0
 #     support_joints: [J1, J2, J3, J4]   # four EXISTING joints (equal share)
 
-overrides: {}     # explicit categorization: {"<object name>": "<category>"}
+overrides: {}     # explicit categorization: {"<name>": "<category>"} or {"<name>": {category, component, outside}}

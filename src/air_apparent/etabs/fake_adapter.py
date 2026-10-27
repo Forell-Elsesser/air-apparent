@@ -13,7 +13,7 @@ from ..models import (
     ModelSnapshot,
     PatternSpec,
 )
-from .adapter import AdapterError
+from .adapter import AdapterError, GroupWriteResult
 
 
 class FakeAdapter:
@@ -29,6 +29,7 @@ class FakeAdapter:
         self.assignments: dict[tuple[str, str, str], Assignment] = {}
         self.manifest: dict = {}
         self.selected: str = ""
+        self.selected_objects: list[str] = []
         self.unlocked_count = 0
         self.calls: list[str] = []
 
@@ -58,9 +59,11 @@ class FakeAdapter:
         return {k: list(v) for k, v in self.groups.items()
                 if not prefix or k.lower().startswith(prefix.lower())}
 
-    def set_group(self, name: str, members: list[str]) -> None:
+    def set_group(self, name: str, members: list[str]) -> GroupWriteResult:
         self._op(f"set_group:{name}")
+        name = next((k for k in self.groups if k.lower() == name.lower()), name)  # keep the model's spelling
         self.groups[name] = list(members)
+        return GroupWriteResult()
 
     def delete_group(self, name: str) -> None:
         self._op(f"delete_group:{name}")
@@ -71,6 +74,10 @@ class FakeAdapter:
         if name not in self.groups:
             raise AdapterError(f"group {name} does not exist")
         self.selected = name
+
+    def select_objects(self, refs: list[str]) -> None:
+        self._op(f"select_objects:{len(refs)}")
+        self.selected_objects = list(refs)
 
     def unlock(self) -> None:
         self._op("unlock")

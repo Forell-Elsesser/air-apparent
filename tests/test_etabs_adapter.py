@@ -74,3 +74,26 @@ def test_read_groups_filters_prefix_case_insensitively():
                          GetAssignments=lambda g: [1, (5,), ("A7",), 0])
     groups = _adapter_with_api(SimpleNamespace(GroupDef=gd)).read_groups("W_")
     assert groups == {"w_wall_+x": ["A:A7"], "W_PH_+Y": ["A:A7"]}
+
+
+def test_set_group_reuses_model_spelling_and_reads_back():  # Review Focus 4
+    calls = []
+    gd = SimpleNamespace(GetNameList=lambda: [1, ("w_wall_+x",), 0],
+                         GetGroup_1=lambda n: [7] + [True] * 13 + [0],
+                         Delete=lambda n: calls.append(("Delete", n)) or 0,
+                         SetGroup_1=lambda n, *a: calls.append(("SetGroup_1", n, a[0])) or 0,
+                         GetAssignments=lambda n: [1, (5,), ("A1",), 0])
+    ao = SimpleNamespace(SetGroupAssign=lambda o, g: calls.append(("assign", o, g)) or (0 if o == "A1" else 3))
+    res = _adapter_with_api(SimpleNamespace(GroupDef=gd, AreaObj=ao)).set_group("W_Wall_+X", ["A:A1", "A:A2"])
+    assert ("Delete", "w_wall_+x") in calls and ("SetGroup_1", "w_wall_+x", 7) in calls
+    assert ("assign", "A1", "w_wall_+x") in calls
+    assert res.refused == (("A:A2", 3),) and res.missing_after_readback == ()
+
+
+def test_set_group_reports_members_missing_after_readback():
+    gd = SimpleNamespace(GetNameList=lambda: [0, (), 0], GetGroup_1=lambda n: [0] + [True] * 13 + [0],
+                         Delete=lambda n: 0, SetGroup_1=lambda n, *a: 0,
+                         GetAssignments=lambda n: [0, (), (), 0])
+    fo = SimpleNamespace(SetGroupAssign=lambda o, g: 0)
+    res = _adapter_with_api(SimpleNamespace(GroupDef=gd, FrameObj=fo)).set_group("W_Mech_+X", ["F:B1"])
+    assert res.refused == () and res.missing_after_readback == ("F:B1",)

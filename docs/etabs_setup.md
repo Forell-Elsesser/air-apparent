@@ -74,3 +74,11 @@ partial state is reported (no rollback).
   build, so `read_assignments` falls back to one call per object when the group route is refused.
 - Checklist items 1 (explicit pid selection) and 2 (geometry read) above are done; the local-axis-3
   visual check is not needed by categorization, which never uses local axes.
+
+## Group write-back verified (2026-10-27, same build)
+
+`WindSession.write_pattern_groups()` wrote all sixteen `W_*` groups to the open Test Model in about
+1.2 seconds (one `SetGroupAssign` per member after `GetGroup_1`, `Delete`, `SetGroup_1`), ETABS
+refused no object, and `check_group_drift()` read back exactly the rule membership. Area objects are
+groupable through the API on ETABS 23.4. Present units were restored on `close()`. The model was not
+saved. Checklist item 3 above is therefore done for the `W_*` groups.

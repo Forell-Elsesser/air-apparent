@@ -6,11 +6,12 @@ import hashlib
 import math
 from dataclasses import dataclass, field
 
-from .categorization import PREFIX, categorize, reconcile_membership
+from .categorization import categorize
 from .config import effective_config_yaml, load_config
 from .demo import build_demo_snapshot
 from .etabs import AdapterError, EtabsAdapter, FakeAdapter
 from .models import (
+    PATTERN_GROUP_NAMES,
     Assignment,
     Categorization,
     Config,
@@ -54,6 +55,7 @@ class WindSession:
         self.pressures: PressureSet | None = None
         self.plan: LoadPlan | None = None
         self.preview_valid = False
+        self.groups_written = False  # the sixteen W_ groups have been written for the current categorization
         self.diagnostics: list[Diagnostic] = []
         self.verification: list[VerifyRow] = []
         self.apply_result: ApplyResult | None = None
@@ -64,6 +66,7 @@ class WindSession:
             self.snapshot = None
         self.cats = self.pressures = self.plan = None
         self.preview_valid = False
+        self.groups_written = False
         self.verification = []
         self.apply_result = None
 
@@ -134,57 +137,68 @@ class WindSession:
         return out
 
     # ------------------------------------------------------------------ steps 5-6
-    def create_preview_groups(self) -> list[Diagnostic]:
-        """Create/update tool-owned preview groups (group metadata only; no loads)."""
+    def write_pattern_groups(self) -> list[Diagnostic]:
+        """Write the sixteen W_* groups with replace semantics (group membership only; no loads)."""
         if self.cats is None:
             self.categorize()
         a = self.adapter
-        manifest = a.read_manifest()
-        owned = set(manifest.get("groups", []))
-        existing = a.read_groups("")
-        specs = self.cats.groups
         diags: list[Diagnostic] = []
-        for g in specs:
-            if g.name in existing and g.name not in owned:
-                diags.append(Diagnostic("error", "group_name_conflict",
-                                        f"group {g.name} exists but is not tool-owned", g.name))
-        if any(d.level == "error" for d in diags):
-            self.preview_valid = False
-            return diags
-        wanted = {g.name for g in specs}
-        for name in sorted(owned - wanted):
-            if name in existing:
-                a.delete_group(name)
-        for g in specs:
-            a.set_group(g.name, list(g.members))
-        manifest.update({"version": MANIFEST_VERSION, "groups": sorted(wanted)})
+        for name in PATTERN_GROUP_NAMES:
+            res = a.set_group(name, list(self.cats.pattern_groups.get(name, ())))
+            for ref, code in res.refused:
+                diags.append(Diagnostic("error", "group_assign_refused",
+                                        f"{name}: ETABS refused {ref} (return code {code})", ref))
+            for ref in res.missing_after_readback:
+                diags.append(Diagnostic("error", "group_member_missing",
+                                        f"{name}: {ref} is not in the group after writing", ref))
+        manifest = a.read_manifest()
+        manifest.update({"version": MANIFEST_VERSION, "groups": list(PATTERN_GROUP_NAMES)})
         a.write_manifest(manifest)
-        self.preview_valid = True
+        self.preview_valid = not any(d.level == "error" for d in diags)
+        self.groups_written = True
+        return diags
+
+    create_preview_groups = write_pattern_groups  # transitional alias for the GUI (Task 13)
+
+    def check_group_drift(self) -> list[Diagnostic]:
+        """Re-read the W_* groups and compare with the rules' membership; drift invalidates the preview."""
+        current = {k.lower(): set(v) for k, v in self.adapter.read_groups("W_").items()}
+        diags: list[Diagnostic] = []
+        for name in PATTERN_GROUP_NAMES:
+            want = set(self.cats.pattern_groups.get(name, ()))
+            have = current.get(name.lower())
+            if have is None:
+                if want:
+                    diags.append(Diagnostic("error", "group_drift",
+                                            f"{name}: not in the model ({len(want)} members expected)", name))
+                continue
+            if have != want:
+                diags.append(Diagnostic("error", "group_drift",
+                                        f"{name}: model has {len(have)} members, rules give {len(want)} "
+                                        f"({len(have - want)} added, {len(want - have)} removed)", name))
+        if diags:
+            self.preview_valid = False
         return diags
 
     def select_group(self, name: str) -> None:
+        """Select a W_* group in ETABS (writing the groups first if needed) or a fine group's members."""
         self._need_adapter()
-        spec = next((g for g in self.cats.groups if g.name == name), None) if self.cats else None
+        if self.cats is None:
+            raise ValueError("Calculate first, then select a group from the current categorization")
+        if name in PATTERN_GROUP_NAMES:
+            if not self.groups_written:
+                diags = self.write_pattern_groups()
+                if diags:
+                    raise AdapterError("; ".join(d.message for d in diags))
+            drift = self.check_group_drift()
+            if drift:
+                raise AdapterError("group drift: " + "; ".join(d.message for d in drift))
+            self.adapter.select_group(name)
+            return
+        spec = next((g for g in self.cats.groups if g.name == name), None)
         if spec is None:
-            raise ValueError("Calculate first and select a group from the current preview")
-        if not self.preview_valid:
-            diags = self.create_preview_groups()
-            if diags:
-                raise AdapterError("; ".join(d.message for d in diags))
-        current = self.adapter.read_groups(PREFIX)
-        diags = reconcile_membership([spec], {name: current[name]} if name in current else {})
-        if any(d.level == "error" for d in diags):
-            self.preview_valid = False
-            raise AdapterError("; ".join(d.message for d in diags))
-        self.adapter.select_group(name)
-
-    def reconcile_groups(self) -> list[Diagnostic]:
-        """Read tool-owned groups back from ETABS and compare with the preview specs."""
-        current = self.adapter.read_groups(PREFIX)
-        diags = reconcile_membership(self.cats.groups, current)
-        if any(d.level == "error" for d in diags):
-            self.preview_valid = False
-        return diags
+            raise ValueError(f"unknown group {name!r}: use a W_ group or a fine group from the current categorization")
+        self.adapter.select_objects(list(spec.members))
 
     # ------------------------------------------------------------------ step 7
     def apply(self, allow_unlock: bool = False) -> ApplyResult:
@@ -196,15 +210,15 @@ class WindSession:
         if self.plan is None or self.cats is None:
             return ApplyResult(False, "no load plan; calculate and build the plan first")
         if not self.preview_valid:
-            return ApplyResult(False, "preview groups are missing or outdated; create them and review")
+            return ApplyResult(False, "W_ groups have not been written or are outdated; write them and review")
         errors = [d for d in self.plan.diagnostics if d.level == "error"]
         if errors:
             return ApplyResult(False, f"plan has {len(errors)} error(s)", diagnostics=errors)
         a = self.adapter
-        drift = [d for d in self.reconcile_groups() if d.level == "error"]
+        drift = self.check_group_drift()
         if drift:
-            return ApplyResult(False, "group membership differs from the preview; refresh the "
-                                      "preview and review again", diagnostics=drift)
+            return ApplyResult(False, "W_ group membership in the model differs from the rules; write the "
+                                      "groups again and review", diagnostics=drift)
         manifest = a.read_manifest()
         conflicts = self._name_conflicts(manifest)
         if conflicts:

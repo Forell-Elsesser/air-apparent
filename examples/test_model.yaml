@@ -1,0 +1,237 @@
+# air-apparent Test Model fixture (schema_version 2)
+#
+# Categorization inputs for examples/Test Model.EDB (seven-story version), verified against the
+# engineers' W_* groups (tests/test_test_model_acceptance.py). Wind inputs, pressure evaluation
+# heights, equipment and platform dimensions and story shears are copied from reference_sample.yaml:
+# this file is a TEST FIXTURE for the categorization rules, not the project's wind configuration.
+
+schema_version: 2
+code_edition: "ASCE 7-10"
+units: "US"
+
+wind:
+  risk_category: "IV"
+  basic_wind_speed_mph: 120.0
+  directionality_factor_kd: 0.85
+  exposure_category: "C"
+  topographic_factor_kzt: 1.0
+  gust_effect_factor_g: 0.85
+  enclosure_classification: "enclosed"
+  internal_pressure_coefficient_abs: 0.18
+  mean_roof_height_above_grade_ft: 62.0
+
+geometry:
+  target: "entire_model"
+  wind_axes: "global_xy"
+  plan_dimensions_source: "etabs"         # derived from the declared segments' extent
+  plan_dimensions_ft:
+    x_wind: {parallel_l: 419.5, perpendicular_b: 260.0}
+    y_wind: {parallel_l: 260.0, perpendicular_b: 419.5}
+
+loading:
+  wall_pressure_branch_by_direction: {"+X": "Min", "-X": "Max", "+Y": "Min", "-Y": "Min"}
+  eccentricity_ratio: 0.15
+  mechanical_patterns: "reversible_xy"
+
+grade:
+  datum_model_elevation_ft: -0.833        # BASE story elevation of the model
+
+story_bands:
+  - {id: L2, bottom_model_elevation_ft: -0.833, top_model_elevation_ft: 31.5, evaluation_height_above_grade_ft: 31.5}
+  - {id: R,  bottom_model_elevation_ft: 31.5,   top_model_elevation_ft: 60.083, evaluation_height_above_grade_ft: 62.0}
+
+# Model stories (bottom-up): L2 31.5, R 60.083, Parapet_1 65.083, Mech 70.708, Penthouse 75.167, Parapet_2 76.917 ft.
+levels:
+  main_roof: R
+  parapet: [Parapet_1, Mech]
+  penthouse_body: [Penthouse]
+  penthouse_parapet: [Parapet_2]
+  mechanical: Mech
+
+# Exterior wall faces. The four bump-outs run from grade to 47.75 ft; the main J and E walls behind
+# them are exposed from 46 ft up. Grid 28.5 is a cut line (the building continues west).
+exterior_segments:
+  - {id: J_W,      along: J,      from: 25.5,    to: 218.417, outside: "-Y"}
+  - {id: J_E,      along: J,      from: 241.667, to: "39",    outside: "-Y"}
+  - {id: J_sliver, along: J,      from: 1.75,    to: 2.25,    outside: "-Y"}
+  - {id: J_SW_top, along: J,      from: 2.25,    to: 25.5,    outside: "-Y", z_from: 46.0}
+  - {id: J_SM_top, along: J,      from: 218.417, to: 241.667, outside: "-Y", z_from: 46.0}
+  - {id: E_W,      along: E,      from: 25.5,    to: 218.417, outside: "+Y"}
+  - {id: E_E,      along: E,      from: 241.667, to: "39",    outside: "+Y"}
+  - {id: E_NW_top, along: E,      from: 2.25,    to: 25.5,    outside: "+Y", z_from: 46.0}
+  - {id: E_NM_top, along: E,      from: 218.417, to: 241.667, outside: "+Y", z_from: 46.0}
+  - {id: G39,      along: "39",   from: J,       to: E,       outside: "+X"}
+  - {id: W_cut,    along: "28.5", from: J,       to: E,       outside: none}
+  - {id: SW_s, axis: y, along: -11.0,   from: "28.5",  to: 25.5,    outside: "-Y"}
+  - {id: SW_w,         along: "28.5",   from: -11.0,   to: J,       outside: "-X"}
+  - {id: SW_e, axis: x, along: 25.5,    from: -11.0,   to: J,       outside: "+X"}
+  - {id: SM_s, axis: y, along: -11.0,   from: 218.417, to: 241.667, outside: "-Y"}
+  - {id: SM_w, axis: x, along: 218.417, from: -11.0,   to: J,       outside: "-X"}
+  - {id: SM_e, axis: x, along: 241.667, from: -11.0,   to: J,       outside: "+X"}
+  - {id: NW_n, axis: y, along: 249.0,   from: "28.5",  to: 25.5,    outside: "+Y"}
+  - {id: NW_w,         along: "28.5",   from: E,       to: 249.0,   outside: "-X"}
+  - {id: NW_e, axis: x, along: 25.5,    from: E,       to: 249.0,   outside: "+X"}
+  - {id: NM_n, axis: y, along: 249.0,   from: 218.417, to: 241.667, outside: "+Y"}
+  - {id: NM_w, axis: x, along: 218.417, from: E,       to: 249.0,   outside: "-X"}
+  - {id: NM_e, axis: x, along: 241.667, from: E,       to: 249.0,   outside: "+X"}
+
+parapets:
+  types:
+    # Grid 39 carries main-roof parapets of four heights (5.0, 5.83, 6.67 and 7.42 ft above R);
+    # each gets its own type so the stack-top match (R5) and the parapet pressure use its real top.
+    - {id: TYP,   kind: main_roof,     top_elevation_above_grade_ft: 65.917, height_above_roof_ft: 5.0}
+    - {id: TYP_B, kind: main_roof,     top_elevation_above_grade_ft: 66.75,  height_above_roof_ft: 5.833}
+    - {id: TYP_C, kind: main_roof,     top_elevation_above_grade_ft: 67.583, height_above_roof_ft: 6.667}
+    - {id: TYP_D, kind: main_roof,     top_elevation_above_grade_ft: 68.333, height_above_roof_ft: 7.417}
+    - {id: PF,  kind: picture_frame, top_elevation_above_grade_ft: 71.542, height_above_roof_ft: 10.625}
+    - {id: PHP, kind: penthouse,     top_elevation_above_grade_ft: 77.75,  height_above_roof_ft: 1.75}
+
+penthouses:
+  - id: PH1
+    plan_ft: {x_min: 266.083, x_max: 301.333, y_min: 214.25, y_max: 238.0}
+    base_model_elevation_ft: 60.083
+    body_height_ft: 15.083
+    min_plan_dimension_ft: 23.75
+    parapet_type: PHP
+  - id: PH2       # east strip along grid 39; its two internal cross walls are placed by overrides below
+    plan_ft: {x_min: 410.083, x_max: 421.75, y_min: 0.0, y_max: 238.0}
+    base_model_elevation_ft: 60.083
+    body_height_ft: 15.083
+    min_plan_dimension_ft: 11.667
+    parapet_type: PHP
+
+rooftop:
+  net_force_coefficient_cf: 1.3
+
+platforms:
+  - id: PL1
+    centroid_elevation_above_grade_ft: 71.0
+    exposed_depth_ft: 3.5
+    min_plan_dimension_ft: 12.0
+    frames_x_wind:
+      [10, 14, 18, 2, 22, 239, 241, 242, 244, 247, 249, 250, 251, 253, 255, 256, 258, 26, 261, 263,
+       264, 265, 267, 269, 270, 272, 275, 277, 278, 279, 281, 282, 284, 287, 289, 290, 291, 292,
+       293, 294, 295, 296, 297, 298, 299, 30, 34, 38, 4, 42, 46, 50, 52, 54, 56, 58, 6, 60, 62, 66,
+       70, 72, 8]
+    frames_y_wind:
+      [220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237,
+       304, 305, 306]
+
+# Equipment: the 72 beams that carry point loads in the model, four per chiller (clustered by plan
+# proximity; membership is the union so the partition does not affect the groups).
+equipment:
+  - id: CHILLER01
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [1, 254, 240, 11]
+  - id: CHILLER02
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [12, 13, 268, 31]
+  - id: CHILLER03
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [16, 15, 17, 257]
+  - id: CHILLER04
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [271, 35, 36, 37]
+  - id: CHILLER05
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [302, 67, 65, 68]
+  - id: CHILLER06
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [64, 63, 301, 61]
+  - id: CHILLER07
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [20, 19, 21, 259]
+  - id: CHILLER08
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [273, 39, 40, 274]
+  - id: CHILLER09
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [41, 285, 55, 45]
+  - id: CHILLER10
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [44, 43, 286, 25]
+  - id: CHILLER11
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [57, 59, 288, 49]
+  - id: CHILLER12
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [48, 47, 276, 29]
+  - id: CHILLER13
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [28, 27, 262, 9]
+  - id: CHILLER14
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [24, 23, 260, 7]
+  - id: CHILLER15
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [5, 245, 246, 300]
+  - id: CHILLER16
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [248, 243, 3, 69]
+  - id: CHILLER17
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [303, 71, 53, 283]
+  - id: CHILLER18
+    centroid_elevation_above_grade_ft: 77.0
+    height_ft: 8.5
+    extent_x_ft: 56.0
+    extent_y_ft: 10.0
+    support_frames: [280, 51, 33, 32]
+
+# PH2's internal cross walls (y 22.6 ft faces +Y, y 215.417 ft faces -Y): one body and one parapet shell each.
+overrides:
+  "1606": {category: penthouse_body, component: PH2, outside: "+Y"}   # y=22.6 ft, z 60.0833-75.1667 ft
+  "1607": {category: penthouse_parapet, component: PH2, outside: "+Y"}   # y=22.6 ft, z 75.1667-76.9167 ft
+  "1614": {category: penthouse_body, component: PH2, outside: "-Y"}   # y=215.42 ft, z 60.0833-75.1667 ft
+  "1615": {category: penthouse_parapet, component: PH2, outside: "-Y"}   # y=215.42 ft, z 75.1667-76.9167 ft

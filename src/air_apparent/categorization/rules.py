@@ -1,25 +1,20 @@
-"""Whole-model shell/frame/joint categorization using simple, inspectable rules.
+"""Rule-based categorization of shells and frames (spec section 6: R0-R5 and R7).
 
-Rules (documented in docs/module_interfaces.md):
-1. Explicit YAML overrides (shells, by object name) force the category.
-2. Horizontal shells are excluded; sloped or non-axis-aligned shells are unresolved.
-3. Vertical shells on a configured penthouse footprint edge are penthouse body/parapet.
-4. Remaining vertical shells are matched to the main-building envelope (bounding rectangle of
-   the dominant axis-aligned wall lines). Below the main roof plane = main wall; above =
-   parapet (type matched by top elevation above grade). Inside the envelope = excluded.
-5. Shells crossing a roof plane or pressure-band boundary are unresolved with a subdivision note.
-6. Frames/joints are categorized only through YAML platform/equipment mappings.
-Existing ETABS groups are never used as authority.
+Inputs are the story bands of the connected model, the declared exterior segments and penthouse
+footprints, and plain geometry. Story labels and local axes are never consulted. Every vertical
+shell ends in a category, a declared exclusion, or a diagnostic that names it.
 """
 
 from __future__ import annotations
 
 import math
-from collections import defaultdict
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 from ..models import (
-    CATEGORIES,
+    DIR_VECTORS,
     EQUIPMENT_JOINT,
+    EQUIPMENT_SUPPORT_FRAME,
     EXCLUDED,
     MAIN_PARAPET,
     MAIN_WALL,
@@ -27,324 +22,363 @@ from ..models import (
     PENTHOUSE_PARAPET,
     PICTURE_FRAME_PARAPET,
     PLATFORM_FRAME,
-    STAIR_PROJECTION,
     UNRESOLVED,
     Categorization,
+    CategorizationSettings,
     Config,
     Diagnostic,
+    LevelRoles,
     ModelSnapshot,
     ObjectCategory,
-    Penthouse,
     PlanDims,
     Shell,
     frame_ref,
     joint_ref,
     shell_ref,
 )
-from .groups import build_group_specs
+from .segments import ResolvedSegment, penthouse_edges, place, resolve_segments
 
-TOL = 0.25  # ft, geometric tolerance
-TOP_TOL = 0.1  # ft, parapet top elevation match tolerance
-EDGE_COVERAGE_MIN = 0.98
-
-_Vec = tuple[float, float, float]
+Band = tuple[str, float, float]  # (story name, bottom, top)
+_EPS = 1e-6
+WALL, PARAPET, PH_BODY, PH_PARAPET = "wall", "parapet", "penthouse_body", "penthouse_parapet"
 
 
-class _Facts:
-    """Geometry of a vertical, axis-aligned shell."""
-
-    def __init__(self, shell: Shell):
-        zs = [c[2] for c in shell.corners]
-        self.zmin, self.zmax = min(zs), max(zs)
-        pts: list[tuple[float, float]] = []
-        for c in shell.corners:
-            if not any(math.hypot(c[0] - p[0], c[1] - p[1]) < 1e-6 for p in pts):
-                pts.append((c[0], c[1]))
-        self.pts = pts
-        self.vertical = len(pts) == 2 and (self.zmax - self.zmin) > TOL
-        self.axis = ""  # "x" if constant-x line (face normal along X), "y" likewise
-        self.coord = 0.0
-        self.lo = self.hi = 0.0
-        if self.vertical:
-            (x0, y0), (x1, y1) = pts
-            if abs(x0 - x1) < TOL:
-                self.axis, self.coord = "x", (x0 + x1) / 2
-                self.lo, self.hi = sorted((y0, y1))
-            elif abs(y0 - y1) < TOL:
-                self.axis, self.coord = "y", (y0 + y1) / 2
-                self.lo, self.hi = sorted((x0, x1))
-
-    @property
-    def length(self) -> float:
-        return self.hi - self.lo
+# --------------------------------------------------------------------------- R0 geometry
+@dataclass(frozen=True)
+class ShellGeometry:
+    ref: str
+    vertical: bool
+    axis_aligned: bool
+    axis: str  # "x" (plane of constant X) or "y"
+    ordinate: float
+    lo: float  # plan extent along the perpendicular axis
+    hi: float
+    zmin: float
+    zmax: float
 
 
-def _normal_of(axis: str, sign: int) -> _Vec:
-    return (float(sign), 0.0, 0.0) if axis == "x" else (0.0, float(sign), 0.0)
+def _collinear(plan: list[tuple[float, float]], tol: float) -> bool:
+    (ax, ay), (bx, by) = max(((p, q) for p in plan for q in plan), key=lambda pq: math.dist(pq[0], pq[1]))
+    length = math.hypot(bx - ax, by - ay)
+    if length < _EPS:
+        return False
+    return all(abs((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / length <= tol for px, py in plan)
 
 
-def _ph_hit(f: _Facts, ph: Penthouse) -> _Vec | None:
-    edges = (("x", ph.x_min, -1, ph.y_min, ph.y_max), ("x", ph.x_max, 1, ph.y_min, ph.y_max),
-             ("y", ph.y_min, -1, ph.x_min, ph.x_max), ("y", ph.y_max, 1, ph.x_min, ph.x_max))
-    for axis, coord, sign, lo, hi in edges:
-        if f.axis == axis and abs(f.coord - coord) <= TOL and f.lo >= lo - TOL and f.hi <= hi + TOL:
-            return _normal_of(axis, sign)
+def shell_geometry(shell: Shell, settings: CategorizationSettings) -> ShellGeometry:
+    tol = settings.plane_tolerance_ft
+    zs = [c[2] for c in shell.corners]
+    zmin, zmax = min(zs), max(zs)
+    plan: list[tuple[float, float]] = []
+    for x, y, _ in shell.corners:
+        if not any(math.hypot(x - a, y - b) < _EPS for a, b in plan):
+            plan.append((x, y))
+    ref = shell_ref(shell.name)
+    vertical = (zmax - zmin) > tol and len(plan) >= 2 and _collinear(plan, tol)
+    if not vertical:
+        return ShellGeometry(ref, False, False, "", 0.0, 0.0, 0.0, zmin, zmax)
+    xs, ys = [p[0] for p in plan], [p[1] for p in plan]
+    if max(xs) - min(xs) <= tol:
+        return ShellGeometry(ref, True, True, "x", sum(xs) / len(xs), min(ys), max(ys), zmin, zmax)
+    if max(ys) - min(ys) <= tol:
+        return ShellGeometry(ref, True, True, "y", sum(ys) / len(ys), min(xs), max(xs), zmin, zmax)
+    return ShellGeometry(ref, True, False, "", 0.0, 0.0, 0.0, zmin, zmax)
+
+
+# --------------------------------------------------------------------------- R1 / R2 levels
+def story_bands(snap: ModelSnapshot) -> list[Band]:
+    """One band per story, bottom-up: (name, bottom, top]."""
+    out: list[Band] = []
+    bottom = snap.base_elevation_ft
+    for s in sorted(snap.stories, key=lambda s: s.elevation_ft):
+        out.append((s.name, bottom, s.elevation_ft))
+        bottom = s.elevation_ft
+    return out
+
+
+def level_of_top(zmax: float, bands: Sequence[Band], settings: CategorizationSettings) -> str | None:
+    for name, _bottom, top in bands:
+        if zmax <= top + settings.level_tolerance_ft:
+            return name
     return None
 
 
-def _envelope(cfg: Config, facts: dict[str, _Facts]) -> dict[str, float]:
-    """Dominant wall lines among below-roof, axis-aligned vertical shells."""
-    main_roof = cfg.roof_planes[0].model_elevation_ft
-    totals: dict[str, dict[float, float]] = {"x": defaultdict(float), "y": defaultdict(float)}
-    for f in facts.values():
-        if f.vertical and f.axis and f.zmax <= main_roof + TOL:
-            totals[f.axis][round(f.coord * 4) / 4] += f.length
-    env: dict[str, float] = {}
-    for axis, key in (("x", "x"), ("y", "y")):
-        t = totals[axis]
-        if not t:
-            continue
-        big = max(t.values())
-        main = sorted(c for c, v in t.items() if v >= 0.5 * big)
-        env[f"{key}_min"], env[f"{key}_max"] = main[0], main[-1]
-    return env
+def element_type(level: str, levels: LevelRoles, bands: Sequence[Band]) -> str | None:
+    names = [b[0] for b in bands]
+    if level not in names:
+        return None
+    if levels.main_roof in names and names.index(level) <= names.index(levels.main_roof):
+        return WALL
+    if level in levels.parapet:
+        return PARAPET
+    if level in levels.penthouse_body:
+        return PH_BODY
+    if level in levels.penthouse_parapet:
+        return PH_PARAPET
+    return None
 
 
-def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:  # noqa: C901
-    out = Categorization()
-    diags = out.diagnostics
-    facts = {s.name: _Facts(s) for s in snap.shells}
-    env = _envelope(cfg, facts) if snap.shells else {}
-    out.envelope = env
-    main_roof = cfg.roof_planes[0].model_elevation_ft
+# --------------------------------------------------------------------------- R3 / R5 shells
+def _normal(outside: str) -> tuple[float, float, float] | None:
+    return DIR_VECTORS.get(outside)
+
+
+def categorize_shells(cfg: Config, snap: ModelSnapshot) -> tuple[dict[str, ObjectCategory], list[Diagnostic]]:  # noqa: C901
+    settings = cfg.categorization
+    bands = story_bands(snap)
+    diags: list[Diagnostic] = []
+    objects: dict[str, ObjectCategory] = {}
+    levels = cfg.levels
+    if levels is None:
+        diags.append(Diagnostic("error", "levels_missing", "YAML has no levels section; no shell can be categorized"))
+        return objects, diags
+    band_names = {b[0] for b in bands}
+    for name in (levels.main_roof, *levels.parapet, *levels.penthouse_body, *levels.penthouse_parapet):
+        if name not in band_names:
+            diags.append(Diagnostic("warning", "level_not_in_model", f"levels: story {name!r} is not in the model"))
+    segs, sdiags = resolve_segments(cfg.exterior_segments, snap.grid_lines)
+    diags += sdiags
+    edges = [e for ph in cfg.penthouses for e in penthouse_edges(ph)]
+    ph_by_id = {ph.id: ph for ph in cfg.penthouses}
     grade = cfg.grade_datum_model_elevation_ft
-    parapet_types = {p.id: p for p in cfg.parapets}
+    roof_top = next((top for name, _b, top in bands if name == levels.main_roof), None)
+    body_bottoms = [bottom for name, bottom, _t in bands if name in levels.penthouse_body]
+    body_bottom = min(body_bottoms) if body_bottoms else None
     shell_names = {s.name for s in snap.shells}
     for k in cfg.overrides:
         if k not in shell_names:
             diags.append(Diagnostic("warning", "override_unknown_object",
                                     f"override target {k!r} is not a shell in the model", k))
+    geoms = {s.name: shell_geometry(s, settings) for s in snap.shells}
+    above_roof = [g for g in geoms.values()
+                  if g.vertical and g.axis_aligned and roof_top is not None
+                  and g.zmin >= roof_top - settings.level_tolerance_ft]
 
-    have_env = all(k in env for k in ("x_min", "x_max", "y_min", "y_max"))
-    if snap.shells and not have_env:
-        diags.append(Diagnostic("error", "unsupported_layout",
-                                "cannot determine a rectangular main-building envelope"))
+    def stack_top(g: ShellGeometry) -> float:
+        """Highest top edge among the above-roof shells on this plane whose plan extents overlap this one."""
+        return max((o.zmax for o in above_roof if o.axis == g.axis
+                    and abs(o.ordinate - g.ordinate) <= settings.plane_tolerance_ft
+                    and min(o.hi, g.hi) - max(o.lo, g.lo) > _EPS), default=g.zmax)
 
-    def on_env_edge(f: _Facts) -> _Vec | None:
-        if not have_env or not f.axis:
-            return None
-        lo_key, hi_key = (("x_min", "x_max") if f.axis == "x" else ("y_min", "y_max"))
-        span = (("y_min", "y_max") if f.axis == "x" else ("x_min", "x_max"))
-        if f.lo < env[span[0]] - TOL or f.hi > env[span[1]] + TOL:
-            return None
-        if abs(f.coord - env[lo_key]) <= TOL:
-            return _normal_of(f.axis, -1)
-        if abs(f.coord - env[hi_key]) <= TOL:
-            return _normal_of(f.axis, 1)
-        return None
-
-    def inside_env(f: _Facts) -> bool:
-        return have_env and f.axis != "" and (
-            env["x_min"] - TOL <= min(p[0] for p in f.pts) and max(p[0] for p in f.pts) <= env["x_max"] + TOL
-            and env["y_min"] - TOL <= min(p[1] for p in f.pts) and max(p[1] for p in f.pts) <= env["y_max"] + TOL)
-
-    def put(ref: str, cat: str, reason: str, **kw) -> None:
-        out.objects[ref] = ObjectCategory(ref, cat, reason, **kw)
-
-    def unresolved(ref: str, reason: str, code: str = "unresolved_object") -> None:
-        put(ref, UNRESOLVED, reason)
-        diags.append(Diagnostic("warning", code, reason, ref))
+    def parapet_type_for(top: float) -> str:
+        for t in cfg.parapets:
+            if t.kind in ("main_roof", "picture_frame") and abs(t.top_elevation_above_grade_ft - (top - grade)) \
+                    <= settings.level_tolerance_ft:
+                return t.id
+        return ""
 
     for s in snap.shells:
-        ref = shell_ref(s.name)
-        f = facts[s.name]
-        override = cfg.overrides.get(s.name)
-        if not f.vertical:
-            if len({round(c[2], 3) for c in s.corners}) == 1:
-                put(ref, override or EXCLUDED, "horizontal shell; no horizontal MWFRS load in MVP",
-                    overridden=bool(override))
-            else:
-                unresolved(ref, "sloped or non-planar shell; unsupported geometry")
-            continue
-        if not f.axis:
-            unresolved(ref, "vertical shell not parallel to global X or Y; unsupported layout",
-                       "unsupported_layout")
-            continue
-        # Penthouse?
-        ph_found = next(((ph, n) for ph in cfg.penthouses if (n := _ph_hit(f, ph)) is not None
-                         and f.zmin >= ph.base_model_elevation_ft - TOL), None)
-        category = override
-        n_out: _Vec | None = None
-        comp = ptype = ""
-        band = ""
-        reason = ""
-        if ph_found:
-            ph, n_out = ph_found
-            comp = ph.id
-            body_top = ph.base_model_elevation_ft + ph.body_height_ft
-            if f.zmin >= body_top - TOL:
-                category = category or PENTHOUSE_PARAPET
-                ptype = _match_parapet(parapet_types, f.zmax - grade, "penthouse")
-                reason = f"on footprint edge of {ph.id}, above body top {body_top:g}"
-            elif f.zmax > body_top + TOL:
-                unresolved(ref, f"shell crosses top of penthouse {ph.id} body (z={body_top:g}); "
-                                "subdivide at the penthouse roof", "needs_subdivision")
-                continue
-            else:
-                category = category or PENTHOUSE_BODY
-                reason = f"on footprint edge of {ph.id}, within body height"
+        g = geoms[s.name]
+        ref = g.ref
+        ov = cfg.overrides.get(s.name)
+        level = level_of_top(g.zmax, bands, settings) if g.vertical else ""
+        fields: dict = {"level": level or ""}
+        diag: Diagnostic | None = None
+        if not g.vertical:
+            category, reason = EXCLUDED, "floor or sloped shell; no horizontal MWFRS load"
+        elif not g.axis_aligned:
+            category, reason = UNRESOLVED, "vertical shell not parallel to global X or Y"
+            diag = Diagnostic("warning", "not_axis_aligned", f"{ref}: {reason}", ref)
+        elif level is None:
+            category, reason = UNRESOLVED, f"top at z={g.zmax:g} ft is above the highest story"
+            diag = Diagnostic("warning", "above_top_story", f"{ref}: {reason}", ref)
         else:
-            n_out = on_env_edge(f)
-            if n_out is None:
-                if category in (STAIR_PROJECTION,) and have_env:
-                    n_out = _outward_from_center(f, env)
-                    reason = "override: stair projection"
-                elif inside_env(f):
-                    category = category or EXCLUDED
-                    reason = "interior to main-building envelope"
-                    put(ref, category, reason, overridden=bool(override))
-                    continue
-                elif category:
-                    pass
+            etype = element_type(level, levels, bands)
+            where = (f"{g.axis}={g.ordinate:g} ft, extent {g.lo:g}-{g.hi:g} ft, z {g.zmin:g}-{g.zmax:g} ft")
+            z_mid = (g.zmin + g.zmax) / 2
+            if etype is None:
+                category, reason = UNRESOLVED, f"level {level!r} has no role in levels"
+                diag = Diagnostic("warning", "level_unmapped", f"{ref}: {reason}", ref)
+            elif etype in (WALL, PARAPET):
+                seg, status = place(g.axis, g.ordinate, g.lo, g.hi, z_mid, segs, settings)
+                edge, estatus = (place(g.axis, g.ordinate, g.lo, g.hi, z_mid, edges, settings)
+                                 if etype == PARAPET else (None, "none"))
+                if status == "ambiguous":
+                    category, reason = UNRESOLVED, f"{where} matches two exterior segments equally"
+                    diag = Diagnostic("error", "ambiguous_segment", f"{ref}: {reason}", ref)
+                elif seg is not None and seg.outside == "none":
+                    category, reason = EXCLUDED, f"on segment {seg.id}, declared not exposed"
+                    fields.update(segment_id=seg.id, side=seg.id)
+                    diag = Diagnostic("info", "declared_unexposed", f"{ref}: {reason}", ref)
+                elif seg is not None:
+                    fields.update(segment_id=seg.id, outside=seg.outside, side=seg.id,
+                                  outward_normal=_normal(seg.outside))
+                    if etype == WALL:
+                        category, reason = MAIN_WALL, f"on exterior segment {seg.id}, level {level}"
+                    else:
+                        top = stack_top(g)
+                        split_body = (edge is not None and body_bottom is not None
+                                      and top > body_bottom + settings.level_tolerance_ft)
+                        if split_body:
+                            category, reason = PENTHOUSE_BODY, f"on {edge.id}; stack reaches {top:g} ft (split body)"
+                            fields.update(segment_id=edge.id, outside=edge.outside, side=edge.id,
+                                          component=edge.component, outward_normal=_normal(edge.outside))
+                        else:
+                            ptype = parapet_type_for(top)
+                            if not ptype:
+                                category = UNRESOLVED
+                                reason = f"parapet stack top {top - grade:g} ft above grade matches no parapet type"
+                                diag = Diagnostic("warning", "parapet_type_unmatched", f"{ref}: {reason}", ref)
+                            else:
+                                kind = next(t.kind for t in cfg.parapets if t.id == ptype)
+                                category = PICTURE_FRAME_PARAPET if kind == "picture_frame" else MAIN_PARAPET
+                                reason = f"parapet type {ptype} on exterior segment {seg.id}, level {level}"
+                                fields.update(parapet_type=ptype)
+                    if seg is not None and (g.lo < seg.start_ft - settings.extent_tolerance_ft
+                                            or g.hi > seg.end_ft + settings.extent_tolerance_ft):
+                        diags.append(Diagnostic("warning", "extent_exceeds_segment",
+                                                f"{ref}: extent {g.lo:g}-{g.hi:g} ft exceeds segment {seg.id} "
+                                                f"({seg.start_ft:g}-{seg.end_ft:g} ft)", ref))
+                elif edge is not None:
+                    category, reason = PENTHOUSE_BODY, f"on penthouse edge {edge.id} below the penthouse level"
+                    fields.update(segment_id=edge.id, outside=edge.outside, side=edge.id, component=edge.component,
+                                  outward_normal=_normal(edge.outside))
+                    diag = Diagnostic("warning", "body_below_penthouse_level", f"{ref}: {reason}", ref)
                 else:
-                    unresolved(ref, "outside the main-building envelope (stray object or unsupported "
-                                    "layout); classify with an override", "unsupported_layout")
-                    continue
-            if n_out is not None and category not in (STAIR_PROJECTION,):
-                if f.zmax <= main_roof + TOL:
-                    cuts = [b.bottom_model_elevation_ft for b in cfg.story_bands]
-                    cuts += [b.top_model_elevation_ft for b in cfg.story_bands]
-                    bad = [z for z in cuts if f.zmin + TOL < z < f.zmax - TOL]
-                    in_band = [b for b in cfg.story_bands if f.zmin >= b.bottom_model_elevation_ft - TOL
-                               and f.zmax <= b.top_model_elevation_ft + TOL]
-                    if bad:
-                        unresolved(ref, f"shell crosses pressure-band boundary at z={bad[0]:g}; "
-                                        "subdivide the shell there", "needs_subdivision")
-                        continue
-                    if not in_band:
-                        unresolved(ref, "shell lies outside all configured story bands")
-                        continue
-                    band = in_band[0].id
-                    category = category or MAIN_WALL
-                    reason = f"on main envelope edge, band {band}"
-                elif f.zmin >= main_roof - TOL:
-                    ptype = _match_parapet(parapet_types, f.zmax - grade, "main")
-                    if not ptype:
-                        unresolved(ref, f"parapet top {f.zmax - grade:g} ft above grade matches no "
-                                        "configured parapet type")
-                        continue
-                    kind = parapet_types[ptype].kind
-                    category = category or (PICTURE_FRAME_PARAPET if kind == "picture_frame"
-                                            else MAIN_PARAPET)
-                    reason = f"parapet type {ptype} on main envelope above roof plane"
+                    category, reason = UNRESOLVED, f"{where} matches no exterior segment"
+                    diag = Diagnostic("warning", "no_exterior_segment", f"{ref}: {reason}", ref)
+            else:  # penthouse body or penthouse parapet
+                edge, estatus = place(g.axis, g.ordinate, g.lo, g.hi, z_mid, edges, settings)
+                if estatus == "ambiguous":
+                    category, reason = UNRESOLVED, f"{where} matches two penthouse edges equally"
+                    diag = Diagnostic("error", "ambiguous_segment", f"{ref}: {reason}", ref)
+                elif edge is None:
+                    category, reason = UNRESOLVED, f"{where} lies on no penthouse footprint edge"
+                    diag = Diagnostic("warning", "no_penthouse_edge", f"{ref}: {reason}", ref)
                 else:
-                    unresolved(ref, f"shell crosses main roof plane (z={main_roof:g}); "
-                                    "subdivide at the roof plane", "needs_subdivision")
-                    continue
-        if category in (PENTHOUSE_PARAPET, MAIN_PARAPET, PICTURE_FRAME_PARAPET) and not ptype:
-            unresolved(ref, "parapet top elevation matches no configured parapet type of this kind")
-            continue
-        if category in (PENTHOUSE_BODY, PENTHOUSE_PARAPET) and not comp:
-            unresolved(ref, f"override {category} requires location on a penthouse footprint edge")
-            continue
-        if category is None or category not in CATEGORIES:
-            unresolved(ref, "no rule matched")
-            continue
-        if category not in (EXCLUDED, UNRESOLVED) and n_out is None:
-            unresolved(ref, f"override {category} could not determine the outward face normal")
-            continue
-        if category == STAIR_PROJECTION:
-            diags.append(Diagnostic("warning", "stair_projection_no_treatment",
-                                    "stair projection categorized; no wind treatment is defined in the "
-                                    "MVP, review manually", ref))
-        # local axis 3 must be normal to the shell
-        if n_out is not None and abs(sum(a * b for a, b in zip(s.local3, n_out, strict=True))) < 0.99 \
-                and category not in (EXCLUDED, UNRESOLVED):
-            unresolved(ref, "local axis 3 is not normal to the shell face; check local axes")
-            continue
-        put(ref, category, reason or "explicit override", band=band, component=comp,
-            parapet_type=ptype, outward_normal=n_out, overridden=bool(override))
-
-    _frames_and_joints(cfg, snap, out)
-    _dimensions(cfg, snap, facts, out, env, have_env)
-    out.groups = build_group_specs(cfg, snap, out)
-    return out
+                    category = PENTHOUSE_BODY if etype == PH_BODY else PENTHOUSE_PARAPET
+                    reason = f"on penthouse edge {edge.id}, level {level}"
+                    fields.update(segment_id=edge.id, outside=edge.outside, side=edge.id, component=edge.component,
+                                  outward_normal=_normal(edge.outside))
+                    if etype == PH_PARAPET:
+                        fields.update(parapet_type=ph_by_id[edge.component].parapet_type or "")
+                    tol = settings.extent_tolerance_ft
+                    if g.lo < edge.start_ft - tol or g.hi > edge.end_ft + tol:
+                        diags.append(Diagnostic("warning", "extent_exceeds_segment",
+                                                f"{ref}: extent {g.lo:g}-{g.hi:g} ft exceeds edge {edge.id}", ref))
+        if ov is not None:
+            category, reason = ov.category, f"override: {ov.category}"
+            fields["overridden"] = True
+            if ov.component:
+                fields["component"] = ov.component
+            if ov.outside:
+                fields.update(outside=ov.outside, outward_normal=_normal(ov.outside),
+                              side=fields.get("side") or f"{ov.component or 'override'}_{ov.outside}")
+            diag = None
+            if category in (EXCLUDED, UNRESOLVED):
+                fields.pop("outward_normal", None)
+                fields.pop("outside", None)
+            elif fields.get("outward_normal") is None:
+                category, reason = UNRESOLVED, f"override {ov.category} needs an outside direction"
+                diag = Diagnostic("warning", "override_needs_outside", f"{ref}: {reason}", ref)
+        objects[ref] = ObjectCategory(ref, category, reason, **fields)
+        if diag is not None:
+            diags.append(diag)
+    return objects, diags
 
 
-def _match_parapet(types: dict, top_above_grade: float, kind_family: str) -> str:
-    for t in types.values():
-        if (t.kind == "penthouse") == (kind_family == "penthouse") \
-                and abs(t.top_elevation_above_grade_ft - top_above_grade) <= TOP_TOL:
-            return t.id
-    return ""
-
-
-def _outward_from_center(f: _Facts, env: dict[str, float]) -> _Vec:
-    cx, cy = (env["x_min"] + env["x_max"]) / 2, (env["y_min"] + env["y_max"]) / 2
-    if f.axis == "x":
-        return _normal_of("x", 1 if f.coord >= cx else -1)
-    return _normal_of("y", 1 if f.coord >= cy else -1)
-
-
-def _frames_and_joints(cfg: Config, snap: ModelSnapshot, out: Categorization) -> None:
-    frames = {f.name for f in snap.frames}
+# --------------------------------------------------------------------------- R7 frames / joints
+def categorize_frames(cfg: Config, snap: ModelSnapshot) -> tuple[dict[str, ObjectCategory], list[Diagnostic]]:
+    settings = cfg.categorization
+    bands = story_bands(snap)
+    diags: list[Diagnostic] = []
+    out: dict[str, ObjectCategory] = {}
+    frames = {f.name: f for f in snap.frames}
     joints = {j.name for j in snap.joints}
-    cat = out.objects
-    for pl in cfg.platforms:
-        for direction, names in (("X", pl.frames_x_wind), ("Y", pl.frames_y_wind)):
-            for n in names:
-                if n not in frames:
-                    out.diagnostics.append(Diagnostic(
-                        "warning", "missing_platform_frame",
-                        f"platform {pl.id}: configured {direction}-wind frame {n!r} not found in model",
-                        frame_ref(n)))
-                    continue
-                cat[frame_ref(n)] = ObjectCategory(frame_ref(n), PLATFORM_FRAME,
-                                                   f"configured platform {pl.id}", component=pl.id)
+    mech = cfg.levels.mechanical if cfg.levels else ""
+
+    def check_level(ref: str, name: str) -> None:
+        f = frames[name]
+        lvl = level_of_top(max(f.p1[2], f.p2[2]), bands, settings)
+        if mech and lvl != mech:
+            diags.append(Diagnostic("warning", "frame_level_unexpected",
+                                    f"{ref}: top is in band {lvl!r}, expected the mechanical band {mech!r}", ref))
+
     for eq in cfg.equipment:
-        for n in eq.support_joints:
-            if n not in joints:
-                out.diagnostics.append(Diagnostic(
-                    "warning", "missing_support_joint",
-                    f"equipment {eq.id}: configured support joint {n!r} not found in model",
-                    joint_ref(n)))
+        for n in eq.support_frames:
+            ref = frame_ref(n)
+            if n not in frames:
+                diags.append(Diagnostic("warning", "missing_support_frame",
+                                        f"equipment {eq.id}: configured support beam {n!r} not found in model", ref))
                 continue
-            cat[joint_ref(n)] = ObjectCategory(joint_ref(n), EQUIPMENT_JOINT,
-                                               f"configured support of {eq.id}", component=eq.id)
+            out[ref] = ObjectCategory(ref, EQUIPMENT_SUPPORT_FRAME, f"configured support beam of {eq.id}",
+                                      component=eq.id, side="XY")
+            check_level(ref, n)
+        for n in eq.support_joints:
+            ref = joint_ref(n)
+            if n not in joints:
+                diags.append(Diagnostic("warning", "missing_support_joint",
+                                        f"equipment {eq.id}: configured support joint {n!r} not found in model", ref))
+                continue
+            out[ref] = ObjectCategory(ref, EQUIPMENT_JOINT, f"configured support of {eq.id}", component=eq.id)
+    for pl in cfg.platforms:
+        for axis, names in (("X", pl.frames_x_wind), ("Y", pl.frames_y_wind)):
+            for n in names:
+                ref = frame_ref(n)
+                if n not in frames:
+                    diags.append(Diagnostic("warning", "missing_platform_frame",
+                                            f"platform {pl.id}: configured {axis}-wind frame {n!r} not found in model",
+                                            ref))
+                    continue
+                prev = out.get(ref)
+                if prev is not None and prev.category == EQUIPMENT_SUPPORT_FRAME:
+                    continue  # equipment beams are already in every W_Mech group
+                side = axis if prev is None or axis in prev.side else "XY"
+                out[ref] = ObjectCategory(ref, PLATFORM_FRAME, f"configured platform {pl.id}", component=pl.id,
+                                          side=side)
+                if prev is None:
+                    check_level(ref, n)
     for f in snap.frames:
-        cat.setdefault(frame_ref(f.name), ObjectCategory(
-            frame_ref(f.name), EXCLUDED, "frame not mapped to a platform; no direct wind load"))
+        out.setdefault(frame_ref(f.name), ObjectCategory(
+            frame_ref(f.name), EXCLUDED, "frame not configured as equipment support or platform member"))
     for j in snap.joints:
-        cat.setdefault(joint_ref(j.name), ObjectCategory(
+        out.setdefault(joint_ref(j.name), ObjectCategory(
             joint_ref(j.name), EXCLUDED, "joint not mapped to equipment; no direct wind load"))
+    return out, diags
 
 
-def _dimensions(cfg, snap, facts, out: Categorization, env, have_env: bool) -> None:
-    if not have_env:
-        return
-    lx = env["x_max"] - env["x_min"]
-    ly = env["y_max"] - env["y_min"]
-    out.derived_dims = {"X": PlanDims(lx, ly), "Y": PlanDims(ly, lx)}
-    y = {"X": cfg.geometry.x_wind, "Y": cfg.geometry.y_wind}
-    for axis, d in out.derived_dims.items():
-        for name, a, b in (("parallel_l", d.parallel_l, y[axis].parallel_l),
-                           ("perpendicular_b", d.perpendicular_b, y[axis].perpendicular_b)):
-            if abs(a - b) > 0.005 * b:
-                out.diagnostics.append(Diagnostic(
-                    "warning", "dimension_discrepancy",
-                    f"{axis}-wind {name}: ETABS envelope {a:g} ft vs YAML {b:g} ft"))
-    # edge coverage check for unsupported layouts
-    main_roof = cfg.roof_planes[0].model_elevation_ft
-    low = [f for f in facts.values() if f.vertical and f.axis and f.zmax <= main_roof + TOL]
-    if not low:
-        return
-    zlow = min(f.zmin for f in low)
-    for axis, key, span in (("x", "x_min", ly), ("x", "x_max", ly), ("y", "y_min", lx),
-                            ("y", "y_max", lx)):
-        covered = sum(f.length for f in low if f.axis == axis and abs(f.coord - env[key]) <= TOL
-                      and abs(f.zmin - zlow) <= TOL)
-        if covered < EDGE_COVERAGE_MIN * span:
-            out.diagnostics.append(Diagnostic(
-                "error", "unsupported_layout",
-                f"envelope edge {key}={env[key]:g} is only {covered / span:.0%} covered by wall "
-                "shells at the lowest level; layout is not a single rectangular building"))
+# --------------------------------------------------------------------------- composition
+def _segment_extent(segs: Sequence[ResolvedSegment]) -> dict[str, float]:
+    xs = [s.ordinate_ft for s in segs if s.axis == "x"]
+    ys = [s.ordinate_ft for s in segs if s.axis == "y"]
+    if not xs or not ys:
+        return {}
+    return {"x_min": min(xs), "x_max": max(xs), "y_min": min(ys), "y_max": max(ys)}
+
+
+def categorize(cfg: Config, snap: ModelSnapshot) -> Categorization:
+    from .groups import build_group_specs, build_pattern_groups, compare_groups
+
+    out = Categorization()
+    shells, sdiags = categorize_shells(cfg, snap)
+    frames, fdiags = categorize_frames(cfg, snap)
+    out.objects = {**shells, **frames}
+    out.diagnostics = sdiags + fdiags + list(snap.read_diagnostics)
+    bands = story_bands(snap)
+    by_name = {b[0]: b for b in bands}
+    for b in cfg.story_bands:
+        if b.id not in by_name:
+            out.diagnostics.append(Diagnostic("warning", "story_band_unknown_story",
+                                              f"story_bands {b.id!r} names no story in the model"))
+        elif abs(by_name[b.id][2] - b.top_model_elevation_ft) > 0.1:
+            out.diagnostics.append(Diagnostic("warning", "story_band_elevation_mismatch",
+                                              f"story_bands {b.id!r} top {b.top_model_elevation_ft:g} ft vs model "
+                                              f"{by_name[b.id][2]:g} ft"))
+    segs, _ = resolve_segments(cfg.exterior_segments, snap.grid_lines)
+    env = _segment_extent(segs)
+    out.envelope = env
+    if env:
+        lx, ly = env["x_max"] - env["x_min"], env["y_max"] - env["y_min"]
+        out.derived_dims = {"X": PlanDims(lx, ly), "Y": PlanDims(ly, lx)}
+        y = {"X": cfg.geometry.x_wind, "Y": cfg.geometry.y_wind}
+        for axis, d in out.derived_dims.items():
+            for name, a, b in (("parallel_l", d.parallel_l, y[axis].parallel_l),
+                               ("perpendicular_b", d.perpendicular_b, y[axis].perpendicular_b)):
+                if abs(a - b) > 0.005 * b:
+                    out.diagnostics.append(Diagnostic(
+                        "warning", "dimension_discrepancy",
+                        f"{axis}-wind {name}: declared segments span {a:g} ft vs YAML {b:g} ft"))
+    out.groups = build_group_specs(cfg, snap, out.objects)
+    out.pattern_groups = build_pattern_groups(out.objects)
+    out.comparison = compare_groups(out.pattern_groups, snap.groups)
+    return out

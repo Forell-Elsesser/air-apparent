@@ -1,4 +1,4 @@
-# air-apparent reference sample (schema_version 1)
+# air-apparent reference sample (schema_version 2)
 #
 # Runnable reproduction of the reference workbook benchmark (see docs/engineering_basis.md).
 # Source cells refer to the reference workbook sheet `Chp 26` (inputs), `Chp 27`, `Chp 29`.
@@ -8,7 +8,7 @@
 # plan is taken from the workbook inputs; model elevations below are demo values, NOT project
 # values. Do not copy them into a live project.
 
-schema_version: 1
+schema_version: 2
 code_edition: "ASCE 7-10"
 units: "US"
 
@@ -55,6 +55,22 @@ loading:
     "-X": {ROOF: 100.0, L2: 220.0}
     "+Y": {ROOF: 100.0, L2: 220.0}
     "-Y": {ROOF: 100.0, L2: 220.0}
+
+# Exterior wall segments of the synthetic demo building (grid labels from air_apparent.demo).
+# along/from/to accept a grid label (quoted when numeric-looking) or a number in feet.
+exterior_segments:
+  - {id: S, along: A, from: "1", to: "2", outside: "-Y"}
+  - {id: N, along: B, from: "1", to: "2", outside: "+Y"}
+  - {id: W, along: "1", from: A, to: B, outside: "-X"}
+  - {id: E, along: "2", from: A, to: B, outside: "+X"}
+
+# Which model stories play which role: bands at or below main_roof are walls.
+levels:
+  main_roof: ROOF
+  parapet: [PARAPET_TYP, PARAPET_PF]
+  penthouse_body: [PH_ROOF]
+  penthouse_parapet: [PH_PARAPET]
+  mechanical: PARAPET_PF
 
 grade:
   datum_model_elevation_ft: 0.0           # model elevation of grade (demo)
@@ -213,4 +229,5 @@ equipment:
     extent_y_ft: 10.0   # width  (Y wind sees height x extent_x = 8.5 x 56 -> 19.742 kip)
     support_joints: [CH18_J1, CH18_J2, CH18_J3, CH18_J4]
 
-overrides: {}   # object name -> category, e.g. {"1604": "penthouse_body"}
+overrides:
+  INT_1: {category: excluded}   # interior demo wall; mapping form: {category, component, outside}
