@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from typing import Iterable
 
 from ..categorization import detect_group_conflicts
 from ..models import (
@@ -12,13 +13,97 @@ from ..models import (
     Categorization,
     Config,
     Diagnostic,
+    GroupSpec,
     LoadPlan,
     ModelSnapshot,
+    PatternSpec,
     PressureSet,
     mech_pattern_name,
 )
 from ..pressures import eccentric_torsion
 from .specs import case_specs, pattern_specs
+
+
+PLACEHOLDER_PRESSURE_PSF = 1.0
+"""Temporary pressure magnitude used until the pressure module is wired in."""
+
+
+@dataclass(frozen=True)
+class PressurePatternPair:
+    """The two ETABS load patterns associated with one shell-group pattern."""
+
+    base_pattern: str
+    max_pressure_pattern: str
+    min_pressure_pattern: str
+    max_pressure_psf: float = PLACEHOLDER_PRESSURE_PSF
+    min_pressure_psf: float = -PLACEHOLDER_PRESSURE_PSF
+
+
+def pair_pressure_patterns(base_patterns: Iterable[str]) -> list[PressurePatternPair]:
+    """Create a max/min load-pattern pair for supported shell-group patterns."""
+
+    pairs: list[PressurePatternPair] = []
+    seen: set[str] = set()
+    for base_pattern in base_patterns:
+        if base_pattern in seen:
+            continue
+        seen.add(base_pattern)
+        if not (
+            base_pattern.startswith("W_Wall_")
+            or base_pattern.startswith("W_Parapet_")
+            or base_pattern.startswith("W_PH_")
+        ):
+            continue
+        if base_pattern.endswith(("_p_max", "_p_min")):
+            raise ValueError(f"base pattern already has a pressure suffix: {base_pattern!r}")
+        pairs.append(PressurePatternPair(
+            base_pattern=base_pattern,
+            max_pressure_pattern=f"{base_pattern}_p_max",
+            min_pressure_pattern=f"{base_pattern}_p_min",
+        ))
+    return pairs
+
+
+def placeholder_pressure_pattern_specs(groups: Iterable[GroupSpec]) -> list[PatternSpec]:
+    """Return ETABS pattern definitions for the placeholder max/min pairs."""
+
+    pairs = pair_pressure_patterns(g.pattern for g in groups)
+    return [
+        PatternSpec(name, "Pressure", pair.base_pattern[-2:], "provisional")
+        for pair in pairs
+        for name in (pair.max_pressure_pattern, pair.min_pressure_pattern)
+    ]
+
+
+def build_placeholder_pressure_assignments(
+    groups: Iterable[GroupSpec],
+    pressure_psf: float = PLACEHOLDER_PRESSURE_PSF,
+) -> list[Assignment]:
+    """Assign temporary ``+/- pressure_psf`` values to shell-group members."""
+
+    if pressure_psf <= 0:
+        raise ValueError("pressure_psf must be positive")
+
+    groups = list(groups)
+    pairs = {p.base_pattern: p for p in pair_pressure_patterns(g.pattern for g in groups)}
+    out: list[Assignment] = []
+    for g in groups:
+        pair = pairs.get(g.pattern)
+        if pair is None or not g.members:
+            continue
+        for member in g.members:
+            for pattern, code_pressure_psf in (
+                (pair.max_pressure_pattern, pressure_psf),
+                (pair.min_pressure_pattern, -pressure_psf),
+            ):
+                out.append(Assignment(
+                    f"{pattern}|{member}", "shell_pressure", member, pattern,
+                    g.assignment_sign * code_pressure_psf / 1000.0, "kip/ft2", "Local3",
+                    f"PLACEHOLDER_{g.pattern}", group=g.name,
+                    code_pressure_psf=code_pressure_psf, sign=g.assignment_sign,
+                    direction=g.direction,
+                    note="temporary +/-1 psf placeholder; replace with pressure-module output"))
+    return out
 
 
 def mech_assignments(cfg: Config, ps: PressureSet, direction: str,

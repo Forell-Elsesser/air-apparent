@@ -55,5 +55,46 @@
     a. That makes the X+ penthouse group the windward penthouse group
         - NOTE: only the windward group gets wind pressures
 4. Repeat for X- loading direction
+    WALLS:
+    a. That makes X- wall group the windward wall group
+        i. Break into stories
+    b. That makes X+ wall group the leeward wall group
+    c. That makes Y+ and Y- wall group the side wall group
+    PARAPET:
+    a. That makes X- parapet group the windward parapet group
+    b. That makes X+ parapet group the leeward parapet group
+    c. That makes Y+ and Y- parapet group the side parapet group
+        - NOTE: these get the same pressures as the side +Y & -Y wall pressures
+    PENTHOUSE:
+    a. That makes the X- penthouse group the windward penthouse group
+        - NOTE: only the windward group gets wind pressures
+
 5. Repeat for Y+ loading direction
+    WALLS:
+    a. That makes Y+ wall group the windward wall group
+        i. Break into stories
+    b. That makes Y- wall group the leeward wall group
+    c. That makes X+ and X- wall group the side wall group
+    PARAPET:
+    a. That makes Y+ parapet group the windward parapet group
+    b. That makes Y- parapet group the leeward parapet group
+    c. That makes X+ and X- parapet group the side parapet group
+        - NOTE: these get the same pressures as the side +X & -X wall pressures
+    PENTHOUSE:
+    a. That makes the Y+ penthouse group the windward penthouse group
+        - NOTE: only the windward group gets wind pressures
+
 6. Repeat for Y- loading direction
+    WALLS:
+    a. That makes Y- wall group the windward wall group
+        i. Break into stories
+    b. That makes Y+ wall group the leeward wall group
+    c. That makes X+ and X- wall group the side wall group
+    PARAPET:
+    a. That makes Y- parapet group the windward parapet group
+    b. That makes Y+ parapet group the leeward parapet group
+    c. That makes X+ and X- parapet group the side parapet group
+        - NOTE: these get the same pressures as the side +X & -X wall pressures
+    PENTHOUSE:
+    a. That makes the Y- penthouse group the windward penthouse group
+        - NOTE: only the windward group gets wind pressures

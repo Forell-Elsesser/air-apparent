@@ -63,6 +63,8 @@ class EtabsAdapter(Protocol):
     def define_combination(self, spec: CombinationSpec) -> None: ...
     def assign(self, a: Assignment) -> None:
         """Set a load with replace semantics, so reapplying never accumulates."""
+    def assign_group_pressure(self, group: str, pattern: str, value: float) -> None:
+        """Apply a uniform local-3 shell pressure to every area in a group."""
     def clear_assignment(self, kind: str, object_ref: str, pattern: str) -> None: ...
     def read_assignments(self, patterns: set[str] | None = None) -> list[Assignment]: ...
     def read_patterns(self) -> list[str]: ...
@@ -395,6 +397,13 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
                     f"FrameObj.SetLoadDistributed({obj})")
             else:
                 raise AdapterError(f"unknown assignment kind {a.kind}")
+
+    def assign_group_pressure(self, group: str, pattern: str, value: float) -> None:
+        """Apply a uniform local-3 pressure to all shells in an ETABS group."""
+        _ok(
+            self.m.AreaObj.SetLoadUniform(group, pattern, value, 3, True, "Local", 1),
+            f"AreaObj.SetLoadUniform(group={group})",
+        )
 
     def clear_assignment(self, kind: str, object_ref: str, pattern: str) -> None:
         with self._kip_ft_units():

@@ -6,6 +6,7 @@ import hashlib
 import math
 from copy import deepcopy
 from dataclasses import dataclass, field
+from typing import Iterable
 
 from .categorization import categorize
 from .config import effective_config_yaml, load_config, validate_config
@@ -19,6 +20,7 @@ from .models import (
     Diagnostic,
     LoadPlan,
     ModelSnapshot,
+    PatternSpec,
     PressureSet,
 )
 from .patterns import build_plan
@@ -133,6 +135,42 @@ class WindSession:
         self.plan = build_plan(self.cfg, self.snapshot, self.cats, self.pressures)
         self.plan.diagnostics += self._audit()
         return self.plan
+
+    def apply_group_pressures(
+        self,
+        patterns: Iterable[PatternSpec],
+        assignments: Iterable[Assignment],
+        allow_unlock: bool = False,
+    ) -> ApplyResult:
+        """Define pressure patterns and apply each pressure once to its ETABS group.
+
+        ``assignments`` may contain one row per shell member, but the adapter
+        receives one group-level call per unique ``(group, pattern, value)``.
+        This is the bridge for the category-driven max/min pressure path.
+        """
+
+        self._need_adapter()
+        patterns = list(patterns)
+        assignments = list(assignments)
+        if any(a.kind != "shell_pressure" or not a.group for a in assignments):
+            return ApplyResult(False, "group pressure assignments must be shell pressures with a group")
+        if self.adapter.info().locked:
+            if not allow_unlock:
+                return ApplyResult(False, "model is locked; confirm allow_unlock=True before applying pressures")
+            self.adapter.unlock()
+
+        try:
+            for spec in patterns:
+                self.adapter.define_pattern(spec)
+            unique_group_loads = {(a.group, a.pattern, a.value): a for a in assignments}
+            for a in unique_group_loads.values():
+                self.adapter.assign_group_pressure(a.group, a.pattern, a.value)
+        except AdapterError as exc:
+            return ApplyResult(False, f"group pressure application failed: {exc}")
+        return ApplyResult(True, "group pressures applied", {
+            "patterns": len(patterns),
+            "assignments": len(unique_group_loads),
+        })
 
     def _audit(self) -> list[Diagnostic]:
         manifest = self.adapter.read_manifest()

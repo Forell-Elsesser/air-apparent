@@ -114,6 +114,22 @@ class FakeAdapter:
             raise AdapterError(f"pattern {a.pattern} is not defined")
         self.assignments[(a.kind, a.object_ref, a.pattern)] = a  # replace semantics
 
+    def assign_group_pressure(self, group: str, pattern: str, value: float) -> None:
+        self._op(f"assign_group_pressure:{pattern}:{group}")
+        if pattern not in self.patterns:
+            raise AdapterError(f"pattern {pattern} is not defined")
+        members = self.groups.get(group)
+        if members is None:
+            raise AdapterError(f"group {group} does not exist")
+        area_members = [ref for ref in members if ref.startswith("A:")]
+        if len(area_members) != len(members):
+            raise AdapterError(f"group {group} contains non-shell objects")
+        for ref in area_members:
+            self.assignments[("shell_pressure", ref, pattern)] = Assignment(
+                f"{pattern}|{ref}", "shell_pressure", ref, pattern, value, "kip/ft2",
+                "Local3", "GROUP_PRESSURE", group=group,
+            )
+
     def clear_assignment(self, kind: str, object_ref: str, pattern: str) -> None:
         self._op(f"clear:{pattern}:{object_ref}")
         self.assignments.pop((kind, object_ref, pattern), None)
