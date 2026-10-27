@@ -23,7 +23,11 @@ from .models import (
     PatternSpec,
     PressureSet,
 )
-from .patterns import build_plan
+from .patterns import (
+    build_plan,
+    build_pressure_assignments,
+    placeholder_pressure_pattern_specs,
+)
 from .pressures import calculate_pressures
 
 MANIFEST_VERSION = 1
@@ -150,6 +154,17 @@ class WindSession:
         """
 
         self._need_adapter()
+        if self.cats is None:
+            return ApplyResult(False, "categorize the model before applying group pressures")
+        if not self.groups_written:
+            group_diags = self.write_pattern_groups()
+            if group_diags:
+                return ApplyResult(False, "category groups could not be initialized",
+                                   diagnostics=group_diags)
+        group_diags = self.check_group_drift()
+        if group_diags:
+            return ApplyResult(False, "category groups do not match the current rules",
+                               diagnostics=group_diags)
         patterns = list(patterns)
         assignments = list(assignments)
         if any(a.kind != "shell_pressure" or not a.group for a in assignments):
@@ -171,6 +186,17 @@ class WindSession:
             "patterns": len(patterns),
             "assignments": len(unique_group_loads),
         })
+
+    def apply_first_pass_group_pressures(self, allow_unlock: bool = False) -> ApplyResult:
+        """Create category groups, then apply the first-pass group pressures."""
+        if self.cats is None:
+            self.categorize()
+        groups = self.cats.groups
+        return self.apply_group_pressures(
+            placeholder_pressure_pattern_specs(groups),
+            build_pressure_assignments(groups),
+            allow_unlock=allow_unlock,
+        )
 
     def _audit(self) -> list[Diagnostic]:
         manifest = self.adapter.read_manifest()

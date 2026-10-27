@@ -14,10 +14,18 @@ from ..models import (
     Config,
     Diagnostic,
     GroupSpec,
+    LEEWARD,
     LoadPlan,
+    MAIN_PARAPET,
+    MAIN_WALL,
     ModelSnapshot,
     PatternSpec,
+    PENTHOUSE_BODY,
+    PENTHOUSE_PARAPET,
+    PICTURE_FRAME_PARAPET,
     PressureSet,
+    SIDE,
+    WINDWARD,
     mech_pattern_name,
 )
 from ..pressures import eccentric_torsion
@@ -26,6 +34,34 @@ from .specs import case_specs, pattern_specs
 
 PLACEHOLDER_PRESSURE_PSF = 1.0
 """Temporary pressure magnitude used until the pressure module is wired in."""
+
+
+@dataclass(frozen=True)
+class PressurePair:
+    """Maximum and minimum shell pressures, in psf."""
+
+    max_psf: float
+    min_psf: float
+
+
+# First-pass values transcribed from pressure_results.txt.  Keep these
+# provisional until the pressure module exposes structured results.
+FIRST_PASS_PARAPET_PRESSURE = PressurePair(56.288522, -37.525681)
+FIRST_PASS_PENTHOUSE_PRESSURE = PressurePair(40.588834, -40.588834)
+FIRST_PASS_WALL_PRESSURES = {
+    "L2": {
+        "WINDWARD": PressurePair(27.600229, 14.690421),
+        "LEEWARD_X": PressurePair(0.358606, -12.551202),
+        "LEEWARD_Y": PressurePair(-8.785841, -21.695649),
+        "SIDE": PressurePair(-14.882139, -27.791947),
+    },
+    "ROOF": {
+        "WINDWARD": PressurePair(30.840096, 17.930288),
+        "LEEWARD_X": PressurePair(0.358606, -12.551202),
+        "LEEWARD_Y": PressurePair(-8.785841, -21.695649),
+        "SIDE": PressurePair(-14.882139, -27.791947),
+    },
+}
 
 
 @dataclass(frozen=True)
@@ -103,6 +139,54 @@ def build_placeholder_pressure_assignments(
                     code_pressure_psf=code_pressure_psf, sign=g.assignment_sign,
                     direction=g.direction,
                     note="temporary +/-1 psf placeholder; replace with pressure-module output"))
+    return out
+
+
+def first_pass_pressure_pair(group: GroupSpec) -> PressurePair | None:
+    """Return the provisional pressure pair for one categorized shell group."""
+    if not group.members:
+        return None
+    if group.category in {MAIN_PARAPET, PICTURE_FRAME_PARAPET, PENTHOUSE_PARAPET}:
+        return FIRST_PASS_PARAPET_PRESSURE
+    if group.category == PENTHOUSE_BODY:
+        return FIRST_PASS_PENTHOUSE_PRESSURE if group.role == WINDWARD else None
+    if group.category != MAIN_WALL:
+        return None
+
+    band_pressures = FIRST_PASS_WALL_PRESSURES.get(group.band)
+    if band_pressures is None:
+        return None
+    if group.role == WINDWARD:
+        return band_pressures["WINDWARD"]
+    if group.role == SIDE:
+        return band_pressures["SIDE"]
+    if group.role == LEEWARD:
+        return band_pressures[f"LEEWARD_{group.direction[1]}"]
+    return None
+
+
+def build_pressure_assignments(groups: Iterable[GroupSpec]) -> list[Assignment]:
+    """Assign first-pass max/min pressures to categorized shell groups."""
+    groups = list(groups)
+    pairs = {p.base_pattern: p for p in pair_pressure_patterns(g.pattern for g in groups)}
+    out: list[Assignment] = []
+    for group in groups:
+        pair = pairs.get(group.pattern)
+        pressure_pair = first_pass_pressure_pair(group)
+        if pair is None or pressure_pair is None:
+            continue
+        for member in group.members:
+            for pattern, code_pressure_psf in (
+                (pair.max_pressure_pattern, pressure_pair.max_psf),
+                (pair.min_pressure_pattern, pressure_pair.min_psf),
+            ):
+                out.append(Assignment(
+                    f"{pattern}|{member}", "shell_pressure", member, pattern,
+                    group.assignment_sign * code_pressure_psf / 1000.0, "kip/ft2", "Local3",
+                    f"FIRST_PASS_{group.pattern}_{group.role}", group=group.name,
+                    code_pressure_psf=code_pressure_psf, sign=group.assignment_sign,
+                    direction=group.direction,
+                    note="first-pass pressure_results.txt mapping; replace with pressure-module output"))
     return out
 
 
