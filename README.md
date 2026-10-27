@@ -55,6 +55,9 @@ print(s.apply().message, [v.ok for v in s.verify()])
 Docs: [engineering basis](docs/engineering_basis.md), [module interfaces](docs/module_interfaces.md),
 [ETABS setup](docs/etabs_setup.md), [limitations](docs/limitations.md).
 
+Examples: [sample calculation and ETABS assignment walkthrough](examples/README.md),
+including the reference workbook, sample EDB model, and worked benchmark calculations.
+
 ## Scope
 
 Horizontal MWFRS for one principal rectangular building (the entire connected model). Roof uplift,
