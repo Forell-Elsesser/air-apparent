@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .config import ConfigError, effective_config_yaml
 from .reporting import export_all, group_table, pressure_output_results
+from .ui_shears import ShearTabMixin
 from .workflow import WindSession
 
 DEFAULT_YAML = Path(__file__).resolve().parents[2] / "templates" / "wind_inputs.yaml"
@@ -17,7 +18,7 @@ GROUP_COLUMNS = ("group", "category", "band", "direction", "role", "result_id", 
                  "members", "sign")
 
 
-class App:
+class App(ShearTabMixin):
     def __init__(self, root, default_yaml: str = str(DEFAULT_YAML)) -> None:
         import tkinter as tk
         from tkinter import ttk
@@ -86,6 +87,7 @@ class App:
             self.tree.heading(c, text=c)
             self.tree.column(c, width=110)
         nb.add(self.tree, text="Preview groups / assignment table")
+        self._build_shear_tab(nb)
         detail = ttk.Frame(nb)
         nb.add(detail, text="Object classification / reasons")
         self.objects = ttk.Treeview(detail, columns=("object", "category", "loading", "reason"), show="headings")
@@ -114,6 +116,8 @@ class App:
         except Exception as exc:  # surfaced to the engineer, never swallowed silently
             self.text.insert("end", "\n" + traceback.format_exc())
             self.status.set(f"Error: {exc}")
+        finally:
+            self._refresh_shear_state()
 
     def _refresh_if_yaml_changed(self) -> None:
         if not self.yaml_path or self.s.cfg is None:

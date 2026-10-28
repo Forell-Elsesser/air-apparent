@@ -236,6 +236,7 @@ class ModelSnapshot:
     existing_patterns: list[str] = field(default_factory=list)
     existing_cases: list[str] = field(default_factory=list)
     existing_combos: list[str] = field(default_factory=list)
+    base_elevation_ft: float = 0.0
 
 
 @dataclass(frozen=True)

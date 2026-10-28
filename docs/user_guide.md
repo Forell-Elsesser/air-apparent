@@ -6,8 +6,9 @@ is a desktop GUI; wind inputs are edited in a YAML file.
 
 The current scope is ASCE 7-10 horizontal MWFRS wind loading for one rectangular building aligned
 with global X/Y. Workbook reproduction and offline tests are available. Independent engineering
-review and live ETABS verification are still pending; eccentric loads and W1-W4 combinations are
-provisional. See [engineering basis](engineering_basis.md) and [limitations](limitations.md).
+review and live ETABS verification are still pending; native GUI startup and live ETABS shear
+extraction remain unverified, and eccentric loads and W1-W4 combinations are provisional. See
+[engineering basis](engineering_basis.md) and [limitations](limitations.md).
 
 ## 1. Install and launch
 
@@ -151,12 +152,43 @@ coordinates; evaluation heights and feature elevations labeled above grade use t
 Shells crossing a roof or pressure-band boundary need subdivision in the model.
 
 `loading.story_shears_kip` is optional and contains cumulative story shears by direction, in kip,
-ordered from the top story downward. The application does not run ETABS analysis or retrieve these
-forces. Without shears, eccentric patterns are defined but remain empty and receive warnings.
-Supplying shears also requires diaphragm reference joints in the model snapshot. The current live
-adapter does not populate those reference joints, and there is no GUI input for them; entering YAML
-shears alone cannot complete the live eccentric-load path. Missing reference joints block apply.
-Do not treat empty eccentric patterns as a complete eccentric-wind design.
+ordered from the top story downward. They remain available as manual inputs. Alternatively, use the
+**Shear / Eccentricity** tab to retrieve **Base Reactions** and **Story Forces** after running analysis
+in ETABS. The application does not run analysis. Without shear inputs, eccentric patterns remain
+empty with warnings; they do not constitute a complete eccentric-wind design.
+
+1. Establish the uneccentric wind loads, then run their static-linear cases in ETABS. Use cases
+   representing the current configuration and required wind components, without eccentricity.
+2. Inspect and Calculate. In **Shear / Eccentricity**, select a direction and enter the source case
+   names, separated by commas. **Fill current wind case names** lists the current plan's component
+   cases for that direction; confirm that these are the cases actually analyzed in ETABS.
+3. **Extract & review shears** reads results only. It preserves the current load plan, lock state,
+   units and database display selections. Envelopes, combinations, incomplete cases, duplicate rows
+   and inconsistent story coverage are rejected. Multiple source cases are summed with their signs
+   before taking the directional magnitude. Auto-wind eccentric settings are not inferred: the
+   selected cases must be uneccentric.
+4. Review the raw signed base reactions and Bottom-of-story shears. The multiplier defaults to 1.0;
+   change it only to undo a known source reduction. There is no automatic 4/3. Existing W2/W4
+   combination factors are unchanged. Base shear is an equilibrium check, not an extra floor force.
+5. The table uses `e = ratio * perpendicular width`, `T_i = e * V_i`, and
+   `Mz_i = T_i - T_(story above)`. The top target above the building is zero. This is an equivalent
+   floor-load idealization using Bottom cuts, for one rigid diaphragm per story. The lowest Bottom
+   shear must agree with the base reaction magnitude within 0.1% or 0.01 kip. Mixed-sign or
+   downward-decreasing cumulative shears require review instead of automatic assignment.
+6. Enter one existing diaphragm joint per story as `ROOF=jointName, L2=jointName`. Each joint must
+   be at the corresponding story elevation and assigned to a rigid diaphragm. Semi-rigid or
+   multiple-diaphragm layouts require a distributed torsion load path outside this feature.
+7. **Use reviewed direction** adopts only that direction's eccentric inputs in the current session.
+   It requires scope `all`; it never silently expands `walls_parapets`. If scope must change,
+   select it explicitly, Calculate and extract again. Then Calculate, recreate and review preview
+   groups, and use the existing Review & apply flow. Applying to a locked model still requires
+   the existing unlock confirmation and discards analysis results.
+
+YAML values remain intact. **Return all directions to YAML** restores them. Inspect/re-read,
+configuration reload, connection change or scope change clears imported shears and pending reviews.
+Exports retain the raw ETABS source, multiplier, floor derivation and reference joints in
+`assignment_plan.json` and `report.html`; `effective_config.yaml` retains the original configuration.
+Live extraction still needs verification against an analyzed ETABS model.
 
 See [configuration schema and interfaces](module_interfaces.md) for the full contract. The sample
 EDB and workbook are described in [examples](../examples/README.md); their presence does not mean
@@ -274,7 +306,7 @@ Review leftover definitions separately when the scope changes.
 | `dimension_discrepancy` | Compare envelope dimensions with YAML and confirm the chosen dimension source. |
 | `missing_support_joint` / `missing_platform_frame` | Check unique object names and mappings against the connected model. |
 | `ecc_no_shears` | The eccentric pattern is empty. Establish the shear inputs and reference-joint path before relying on it. |
-| `ecc_no_reference_joint` | The story is absent or lacks a reference joint. The current live reader needs additional integration; there is no GUI mapping control. |
+| `ecc_no_reference_joint` | Supply and validate the story's existing rigid-diaphragm joint in Shear / Eccentricity when adopting analyzed shears. |
 | Preview missing/outdated or membership differs | Recalculate if inputs changed, recreate preview groups, and review membership again. |
 | `group_name_conflict` / `name_conflict` | Check that the model and ownership manifest belong together. Resolve unrelated name collisions deliberately; do not remove unrelated content or the manifest merely to bypass the check. |
 | Plan has errors, but the cause is unclear | Read Config / Diagnostics after Calculate, or export `report.html` and read Diagnostics and unresolved items. |

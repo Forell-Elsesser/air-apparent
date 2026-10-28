@@ -31,6 +31,16 @@ class FakeAdapter:
         self.selected: str = ""
         self.unlocked_count = 0
         self.calls: list[str] = []
+        self.analysis_shears: dict = {}
+
+    def read_shears(self, cases: tuple[str, ...]):
+        if cases not in self.analysis_shears:
+            raise AdapterError("offline demo has no analysis results; connect to an analyzed ETABS model")
+        return self.analysis_shears[cases]
+
+    def validate_eccentric_reference(self, joint: str) -> None:
+        if not any(s.reference_joint == joint and s.diaphragm for s in self.snapshot.stories):
+            raise AdapterError(f"joint {joint}: no rigid diaphragm reference in the offline model")
 
     def _op(self, name: str) -> None:
         self.calls.append(name)

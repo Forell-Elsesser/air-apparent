@@ -103,6 +103,7 @@ def export_all(session: WindSession, outdir: str | Path) -> list[Path]:
         "cases": [asdict(c) for c in session.plan.cases],
         "combinations": [asdict(c) for c in session.plan.combinations],
         "groups": group_table(session), "assignments": rows,
+        "eccentricity_analysis_sources": {d: asdict(item) for d, item in session.adopted_shears.items()},
         "object_classification": [asdict(o) for o in session.cats.objects.values()]}, indent=2), encoding="utf-8")
     p_csv = out / "assignment_plan.csv"
     with p_csv.open("w", newline="", encoding="utf-8") as fh:
@@ -153,6 +154,21 @@ def html_report(session: WindSession) -> str:  # noqa: C901
         ["group", "category", "band", "dir", "role", "result", "value", "pattern", "members", "sign"],
         [list(r.values()) for r in group_table(session)]))
     ecc = [a for a in plan.assignments if a.kind == "joint_moment"]
+    if session.adopted_shears:
+        sec.append("<h2>ETABS analysis shear sources</h2><p>Reviewed session inputs override only the listed "
+                   "eccentricity directions; exported YAML preserves original inputs. Bottom-cut shear is "
+                   "idealized as equivalent floor Mz for one rigid diaphragm per story.</p>" + _table(
+            ["direction", "model", "cases", "multiplier", "raw base Fx/Fy (kip)", "used base shear (kip)",
+             "base eV (kip-ft)", "sum floor Mz (kip-ft)", "reference joints"],
+            [[d, item.review.source.model_path, ", ".join(item.review.source.cases), item.review.scale,
+              f"{item.review.source.base_fx_kip:g} / {item.review.source.base_fy_kip:g}",
+              item.review.base_shear_kip, item.review.base_target_kip_ft,
+              sum(r.applied_moment_kip_ft for r in item.review.rows), dict(item.reference_joints)]
+             for d, item in session.adopted_shears.items()]))
+        sec.append(_table(
+            ["direction", "story", "V used (kip)", "e (ft)", "target eV (kip-ft)", "floor Mz (kip-ft)"],
+            [[d, r.story, r.cumulative_shear_kip, r.eccentricity_ft, r.target_torsion_kip_ft,
+              r.applied_moment_kip_ft] for d, item in session.adopted_shears.items() for r in item.review.rows]))
     sec.append("<h2>Eccentric torsion derivation (provisional)</h2>" + _table(
         ["pattern", "joint", "moment kip-ft", "note"], [[a.pattern, a.object_ref, f"{a.value:.4g}", a.note]
                                                         for a in ecc]))

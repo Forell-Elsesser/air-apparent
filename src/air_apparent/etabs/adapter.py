@@ -34,6 +34,8 @@ class AdapterError(RuntimeError):
 class EtabsAdapter(Protocol):
     def info(self) -> ModelInfo: ...
     def read_model(self) -> ModelSnapshot: ...
+    def read_shears(self, cases: tuple[str, ...]): ...
+    def validate_eccentric_reference(self, joint: str) -> None: ...
     def read_groups(self) -> dict[str, list[str]]: ...
     def set_group(self, name: str, members: list[str]) -> None:
         """Create the group or replace its membership entirely."""
@@ -172,6 +174,20 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
         _ok(self.m.SetModelIsLocked(False), "SetModelIsLocked(False)")
 
     # ---- read
+    def read_shears(self, cases: tuple[str, ...]):
+        from .shears import read_shears
+        return read_shears(self, cases)
+
+    def validate_eccentric_reference(self, joint: str) -> None:
+        r = self.m.PointObj.GetDiaphragm(joint)
+        _ok(r[-1], f"PointObj.GetDiaphragm({joint})")
+        if not r[1]:
+            raise AdapterError(f"joint {joint}: assign an existing rigid diaphragm before using floor Mz")
+        diaphragm = self.m.Diaphragm.GetDiaphragm(r[1])
+        _ok(diaphragm[-1], f"Diaphragm.GetDiaphragm({r[1]})")
+        if diaphragm[0]:
+            raise AdapterError(f"joint {joint}: semi-rigid diaphragms require a distributed torsion load path")
+
     def read_model(self) -> ModelSnapshot:
         with self._kip_ft_units():
             return self._read_model_in_kip_ft()
@@ -200,6 +216,7 @@ class ComEtabsAdapter:  # pragma: no cover - requires Windows + ETABS
             _ok(r, f"FrameObj.GetPoints({name})")
             snap.frames.append(Frame(name, pts[p1], pts[p2], tuple(member_of.get(f"F:{name}", ()))))
         stories = m.Story.GetStories_2()
+        snap.base_elevation_ft = float(stories[0])
         for nm, el in zip(stories[2], stories[3], strict=False):
             snap.stories.append(Story(nm, float(el)))
         snap.groups = groups

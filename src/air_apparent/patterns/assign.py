@@ -18,6 +18,7 @@ from ..models import (
     mech_pattern_name,
 )
 from ..pressures import eccentric_torsion
+from ..shear_review import AdoptedShears
 from .specs import case_specs, pattern_specs
 
 
@@ -65,7 +66,8 @@ def verify_mech_reversibility(cfg: Config, ps: PressureSet) -> list[Diagnostic]:
 
 
 def build_assignments(cfg: Config, snap: ModelSnapshot, cats: Categorization,
-                      ps: PressureSet) -> tuple[list[Assignment], list[Diagnostic]]:
+                      ps: PressureSet, adopted: dict[str, AdoptedShears] | None = None
+                      ) -> tuple[list[Assignment], list[Diagnostic]]:
     out: list[Assignment] = []
     diags: list[Diagnostic] = []
     for g in cats.groups:
@@ -103,18 +105,19 @@ def build_assignments(cfg: Config, snap: ModelSnapshot, cats: Categorization,
         if abs(total - ps.value(f"EQ_{eq.id}_FX")) > 1e-9:
             diags.append(Diagnostic("error", "force_conservation", f"{eq.id}: joint forces do not sum "
                                                                     "to the resultant"))
-    e_assign, e_diags = _eccentric(cfg, snap, ps)
+    e_assign, e_diags = _eccentric(cfg, snap, ps, adopted)
     return out + e_assign, diags + e_diags
 
 
-def _eccentric(cfg: Config, snap: ModelSnapshot, ps: PressureSet):
+def _eccentric(cfg: Config, snap: ModelSnapshot, ps: PressureSet, adopted=None):
     out: list[Assignment] = []
     diags: list[Diagnostic] = []
     stories = {s.name: s for s in snap.stories}
     for d in DIRECTIONS:
+        imported = (adopted or {}).get(d)
         shears = cfg.loading.story_shears_kip.get(d)
         pat = f"W_Ecc_{d}"
-        if not shears:
+        if not shears and imported is None:
             diags.append(Diagnostic("warning", "ecc_no_shears",
                                     f"{pat}: no story shears supplied; pattern has no assignments "
                                     "(provisional)"))
@@ -122,18 +125,21 @@ def _eccentric(cfg: Config, snap: ModelSnapshot, ps: PressureSet):
         axis = d[1]
         b = ps.dims[axis].perpendicular_b
         try:
-            rows = eccentric_torsion(list(shears.items()), cfg.loading.eccentricity_ratio, b, "yaml")
+            rows = (imported.review.rows if imported else
+                    eccentric_torsion(list(shears.items()), cfg.loading.eccentricity_ratio, b, "yaml"))
         except ValueError as exc:
             diags.append(Diagnostic("error", "ecc_invalid_shears", f"{pat}: {exc}"))
             continue
         for r in rows:
             st = stories.get(r.story)
-            if st is None or not st.reference_joint:
+            reference = dict(imported.reference_joints).get(r.story) if imported else (
+                st.reference_joint if st else None)
+            if st is None or not reference:
                 diags.append(Diagnostic("error", "ecc_no_reference_joint",
                                         f"{pat}: story {r.story!r} has no diaphragm reference joint"))
                 continue
             out.append(Assignment(
-                f"{pat}|P:{st.reference_joint}", "joint_moment", f"P:{st.reference_joint}", pat,
+                f"{pat}|P:{reference}", "joint_moment", f"P:{reference}", pat,
                 r.applied_moment_kip_ft, "kip-ft", "Mz", f"ECC_{d}", direction=d,
                 note=f"e={r.eccentricity_ft:g} ft; target={r.target_torsion_kip_ft:g}; "
                      f"shear={r.cumulative_shear_kip:g} ({r.shear_source}); "
@@ -141,10 +147,11 @@ def _eccentric(cfg: Config, snap: ModelSnapshot, ps: PressureSet):
     return out, diags
 
 
-def build_plan(cfg: Config, snap: ModelSnapshot, cats: Categorization, ps: PressureSet) -> LoadPlan:
+def build_plan(cfg: Config, snap: ModelSnapshot, cats: Categorization, ps: PressureSet,
+               adopted: dict[str, AdoptedShears] | None = None) -> LoadPlan:
     from ..combinations import build_combinations
 
-    assignments, diags = build_assignments(cfg, snap, cats, ps)
+    assignments, diags = build_assignments(cfg, snap, cats, ps, adopted)
     diags = list(cats.diagnostics) + detect_group_conflicts(cats.groups) + diags
     review = [o for o in cats.objects.values() if o.load_issue]
     if review:

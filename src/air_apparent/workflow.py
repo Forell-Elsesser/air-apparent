@@ -6,6 +6,7 @@ import hashlib
 import math
 from copy import deepcopy
 from dataclasses import dataclass, field
+from uuid import uuid4
 
 from .categorization import PREFIX, categorize, reconcile_membership
 from .config import effective_config_yaml, load_config, validate_config
@@ -22,6 +23,7 @@ from .models import (
 )
 from .patterns import build_plan
 from .pressures import calculate_pressures
+from .shear_review import AdoptedShears, ShearReview, review_shears
 
 MANIFEST_VERSION = 1
 
@@ -58,11 +60,17 @@ class WindSession:
         self.diagnostics: list[Diagnostic] = []
         self.verification: list[VerifyRow] = []
         self.apply_result: ApplyResult | None = None
+        self.input_revision = uuid4().hex
+        self.adopted_shears: dict[str, AdoptedShears] = {}
+        self.snapshot_model_path = ""
 
     # ------------------------------------------------------------------ invalidation
     def _invalidate(self, from_model: bool = False) -> None:
+        self.input_revision = uuid4().hex
+        self.adopted_shears.clear()
         if from_model:
             self.snapshot = None
+            self.snapshot_model_path = ""
         self.cats = self.pressures = self.plan = None
         self.preview_valid = False
         self.verification = []
@@ -99,6 +107,7 @@ class WindSession:
     def read_model(self) -> ModelSnapshot:
         self._need_adapter()
         self.snapshot = self.adapter.read_model()
+        self.snapshot_model_path = self.adapter.info().path
         self._invalidate()
         return self.snapshot
 
@@ -127,9 +136,53 @@ class WindSession:
     def build_plan(self) -> LoadPlan:
         if self.pressures is None:
             self.calculate()
-        self.plan = build_plan(self.cfg, self.snapshot, self.cats, self.pressures)
+        self.plan = build_plan(self.cfg, self.snapshot, self.cats, self.pressures, self.adopted_shears)
         self.plan.diagnostics += self._audit()
         return self.plan
+
+    def extract_shear_review(self, cases: tuple[str, ...], direction: str, scale: float = 1.0) -> ShearReview:
+        """Read and validate analysis results without changing the plan or YAML."""
+        self._need_adapter()
+        if self.pressures is None or self.snapshot is None:
+            raise ValueError("Inspect and Calculate before extracting shear results")
+        source = self.adapter.read_shears(cases)
+        if source.model_path != self.snapshot_model_path or source.model_path != self.adapter.info().path:
+            raise ValueError("source results belong to a different ETABS model; Inspect and Calculate again")
+        return review_shears(source, direction, scale, self.cfg.loading.eccentricity_ratio,
+                             self.snapshot, self.pressures, self.input_revision)
+
+    def use_shear_review(self, review: ShearReview, reference_joints: dict[str, str]) -> None:
+        """Adopt one direction atomically; normal preview/apply remains required."""
+        if review.input_revision != self.input_revision or self.pressures is None:
+            raise ValueError("shear review is stale; Calculate and extract again")
+        if self.cfg.loading.scope != "all":
+            raise ValueError("eccentricity is excluded by walls_parapets scope; explicitly choose all, "
+                             "Calculate and extract again before adopting torsion")
+        if review.source.model_path != self.adapter.info().path:
+            raise ValueError("connected model changed; Inspect, Calculate and extract again")
+        joints = {j.name: j for j in self.snapshot.joints}
+        stories = {s.name: s for s in self.snapshot.stories}
+        if set(reference_joints) != {r.story for r in review.rows}:
+            raise ValueError("map exactly one existing rigid-diaphragm joint for every reviewed story")
+        if len(set(reference_joints.values())) != len(reference_joints):
+            raise ValueError("each story requires a distinct reference joint")
+        for story, joint in reference_joints.items():
+            if joint not in joints or not math.isclose(joints[joint].xyz[2], stories[story].elevation_ft,
+                                                      abs_tol=1e-4, rel_tol=0):
+                raise ValueError(f"{story}: joint {joint!r} is missing or is not at the story elevation")
+            self.adapter.validate_eccentric_reference(joint)
+        self.adopted_shears[review.direction] = AdoptedShears(review, tuple(reference_joints.items()))
+        self.plan = None
+        self.preview_valid = False
+        self.verification = []
+        self.apply_result = None
+
+    def use_yaml_shears(self) -> None:
+        self.adopted_shears.clear()
+        self.plan = None
+        self.preview_valid = False
+        self.verification = []
+        self.apply_result = None
 
     def _audit(self) -> list[Diagnostic]:
         manifest = self.adapter.read_manifest()
@@ -212,6 +265,8 @@ class WindSession:
         if errors:
             return ApplyResult(False, f"plan has {len(errors)} error(s)", diagnostics=errors)
         a = self.adapter
+        if any(item.review.source.model_path != a.info().path for item in self.adopted_shears.values()):
+            return ApplyResult(False, "connected model changed; Inspect and extract shears again")
         drift = [d for d in self.reconcile_groups() if d.level == "error"]
         if drift:
             return ApplyResult(False, "group membership differs from the preview; refresh the "
